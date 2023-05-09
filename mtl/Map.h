@@ -22,12 +22,16 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "mtl/IntTypes.h"
 #include "mtl/Vec.h"
+#include <string>
+#include <unordered_map>
 
 namespace Glucose {
 
 //=================================================================================================
 // Default hash/equals functions
 //
+
+static inline uint32_t hash(std::string x) {std::hash<std::string> hasher;return hasher(x); }
 
 template<class K> struct Hash  { uint32_t operator()(const K& k)               const { return hash(k);  } };
 template<class K> struct Equal { bool     operator()(const K& k1, const K& k2) const { return k1 == k2; } };
@@ -112,6 +116,7 @@ class Map {
         for (int i = 0; i < ps.size(); i++)
             if (equals(ps[i].key, k))
                 res = &ps[i].data;
+//        if(res==NULL) printf("%s\n",k.c_str());
         assert(res != NULL);
         return *res;
     }
@@ -125,6 +130,8 @@ class Map {
         for (int i = 0; i < ps.size(); i++)
             if (equals(ps[i].key, k))
                 res = &ps[i].data;
+//        if(res==NULL) printf("%s\n",k.c_str());
+
         assert(res != NULL);
         return *res;
     }

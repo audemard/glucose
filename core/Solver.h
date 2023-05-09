@@ -57,10 +57,40 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "core/BoundedQueue.h"
 #include "core/Constants.h"
 #include "mtl/Clone.h"
+#include "core/SolverStats.h"
 
 
 namespace Glucose {
+// Core stats 
+    
+enum CoreStats {
+  sumResSeen,
+  sumRes,
+  sumTrail,  
+  nbPromoted,
+  originalClausesSeen,
+  sumDecisionLevels,
+  nbPermanentLearnts,
+  nbRemovedClauses,
+  nbRemovedUnaryWatchedClauses,
+  nbReducedClauses,
+  nbDL2,
+  nbBin,
+  nbUn,
+  nbReduceDB,
+  rnd_decisions,
+  nbstopsrestarts,
+  nbstopsrestartssame,
+  lastblockatrestart,
+  dec_vars,
+  clauses_literals,
+  learnts_literals,
+  max_literals,
+  tot_literals,
+  noDecisionConflict
+} ;
 
+#define coreStatsSize 24
 //=================================================================================================
 // Solver -- the main class:
 
@@ -94,7 +124,6 @@ public:
     bool    addClause (Lit p, Lit q, Lit r);                    // Add a ternary clause to the solver. 
     virtual bool    addClause_(      vec<Lit>& ps);                     // Add a clause to the solver without making superflous internal copy. Will
                                                                 // change the passed vector 'ps'.
-
     // Solving:
     //
     bool    simplify     ();                        // Removes already satisfied clauses.
@@ -135,7 +164,7 @@ public:
     int     nClauses   ()      const;       // The current number of original clauses.
     int     nLearnts   ()      const;       // The current number of learnt clauses.
     int     nVars      ()      const;       // The current number of variables.
-    int     nFreeVars  ()      const;
+    int     nFreeVars  ()      ;
 
     inline char valuePhase(Var v) {return polarity[v];}
 
@@ -181,7 +210,8 @@ public:
     int          incReduceDB;
     int          specialIncReduceDB;
     unsigned int lbLBDFrozenClause;
-
+    bool         chanseokStrategy;
+    int          coLBDBound; // Keep all learnts with lbd<=coLBDBound
     // Constant for reducing clause
     int          lbSizeMinimizingClause;
     unsigned int lbLBDMinimizingClause;
@@ -196,13 +226,21 @@ public:
     int       phase_saving;       // Controls the level of phase saving (0=none, 1=limited, 2=full).
     bool      rnd_pol;            // Use random polarities for branching heuristics.
     bool      rnd_init_act;       // Initialize variable activities with a small random value.
+    bool      randomizeFirstDescent; // the first decisions (until first cnflict) are made randomly
+                                     // Useful for syrup!
     
     // Constant for Memory managment
     double    garbage_frac;       // The fraction of wasted memory allowed before a garbage collection is triggered.
 
-    // Certified UNSAT ( Thanks to Marijn Heule)
+    // Certified UNSAT ( Thanks to Marijn Heule
+    // New in 2016 : proof in DRAT format, possibility to use binary output
     FILE*               certifiedOutput;
     bool                certifiedUNSAT;
+    bool                vbyte;
+
+    void write_char (unsigned char c);
+    void write_lit (int n);
+
 
     // Panic mode. 
     // Save memory
@@ -223,18 +261,27 @@ public:
     virtual bool panicModeIsEnabled();
     
     
-
-    // Statistics: (read-only member variable)
-    uint64_t    nbPromoted;          // Number of clauses from unary to binary watch scheme
-    uint64_t    originalClausesSeen; // Number of original clauses seen
-    uint64_t    sumDecisionLevels;
-    //
-    uint64_t nbRemovedClauses,nbRemovedUnaryWatchedClauses, nbReducedClauses,nbDL2,nbBin,nbUn,nbReduceDB,solves, starts, decisions, rnd_decisions, propagations, conflicts,conflictsRestarts,nbstopsrestarts,nbstopsrestartssame,lastblockatrestart;
-    uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
+    double luby(double y, int x);
+    
+    // Statistics 
+    vec<uint64_t> stats;
+    
+    // Important stats completely related to search. Keep here
+    uint64_t solves,starts,decisions,propagations,conflicts,conflictsRestarts;
 
 protected:
 
     long curRestart;
+
+    // Alpha variables
+    bool glureduce;
+    uint32_t restart_inc;
+    bool  luby_restart;
+    bool adaptStrategies;
+    uint32_t luby_restart_factor;
+    bool randomize_on_restarts, fixed_randomize_on_restarts, newDescent;
+    uint32_t randomDescentAssignments;
+    bool forceUnsatOnNewDescent;
     // Helper structures:
     //
     struct VarData { CRef reason; int level; };
@@ -283,10 +330,14 @@ protected:
                         unaryWatches;       //  Unary watch scheme (clauses are seen when they become empty
     vec<CRef>           clauses;          // List of problem clauses.
     vec<CRef>           learnts;          // List of learnt clauses.
+    vec<CRef>           permanentLearnts; // The list of learnts clauses kept permanently
     vec<CRef>           unaryWatchedClauses;  // List of imported clauses (after the purgatory) // TODO put inside ParallelSolver
 
     vec<lbool>          assigns;          // The current assignments.
     vec<char>           polarity;         // The preferred polarity of each variable.
+    vec<char>           forceUNSAT;
+    void                bumpForceUNSAT(Lit q); // Handles the forces
+
     vec<char>           decision;         // Declares if a variable is eligible for selection in the decision heuristic.
     vec<Lit>            trail;            // Assignment stack; stores all assigments made in the order they were made.
     vec<int>            nbpos;
@@ -299,8 +350,6 @@ protected:
     Heap<VarOrderLt>    order_heap;       // A priority queue of variables ordered with respect to the variable activity.
     double              progress_estimate;// Set by 'search()'.
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
-    bool reduceOnSize;
-    int  reduceOnSizeSize;                // See XMinisat paper
     vec<unsigned int>   permDiff;           // permDiff[var] contains the current conflict number... Used to count the number of  LBD
     
 
@@ -361,9 +410,11 @@ protected:
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
     virtual lbool    solve_           (bool do_simp = true, bool turn_off_simp = false);                                                      // Main solve method (assumptions given in 'assumptions').
-    virtual void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
+    virtual void     reduceDB         ();                                              // Reduce the set of learnt clauses.
     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
     void     rebuildOrderHeap ();
+
+    void     adaptSolver();                                                            // Adapt solver strategies
 
     // Maintaining Variable/Clause activity:
     //
@@ -383,8 +434,7 @@ protected:
     bool     locked           (const Clause& c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
     bool     satisfied        (const Clause& c) const; // Returns TRUE if a clause is satisfied in the current state.
 
-    unsigned int computeLBD(const vec<Lit> & lits,int end=-1);
-    unsigned int computeLBD(const Clause &c);
+    template <typename T> unsigned int computeLBD(const T & lits,int end=-1);
     void minimisationWithBinaryResolution(vec<Lit> &out_learnt);
 
     virtual void     relocAll         (ClauseAllocator& to);
@@ -477,12 +527,14 @@ inline int      Solver::nAssigns      ()      const   { return trail.size(); }
 inline int      Solver::nClauses      ()      const   { return clauses.size(); }
 inline int      Solver::nLearnts      ()      const   { return learnts.size(); }
 inline int      Solver::nVars         ()      const   { return vardata.size(); }
-inline int      Solver::nFreeVars     ()      const   { return (int)dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]); }
+inline int      Solver::nFreeVars     ()         { 
+    int a = stats[dec_vars];
+    return (int)(a) - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]); }
 inline void     Solver::setPolarity   (Var v, bool b) { polarity[v] = b; }
 inline void     Solver::setDecisionVar(Var v, bool b) 
 { 
-    if      ( b && !decision[v]) dec_vars++;
-    else if (!b &&  decision[v]) dec_vars--;
+    if      ( b && !decision[v]) stats[dec_vars]++;
+    else if (!b &&  decision[v]) stats[dec_vars]--;
 
     decision[v] = b;
     insertVarOrder(v);
@@ -546,6 +598,23 @@ inline void Solver::printInitialClause(CRef cr)
 }
 
 //=================================================================================================
+struct reduceDBAct_lt {
+    ClauseAllocator& ca;
+
+    reduceDBAct_lt(ClauseAllocator& ca_) : ca(ca_) {
+    }
+
+    bool operator()(CRef x, CRef y) {
+
+        // Main criteria... Like in MiniSat we keep all binary clauses
+        if (ca[x].size() > 2 && ca[y].size() == 2) return 1;
+
+        if (ca[y].size() > 2 && ca[x].size() == 2) return 0;
+        if (ca[x].size() == 2 && ca[y].size() == 2) return 0;
+
+        return ca[x].activity() < ca[y].activity();
+    }
+};
 
 struct reduceDB_lt {
     ClauseAllocator& ca;

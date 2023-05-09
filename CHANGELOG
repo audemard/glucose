@@ -1,3 +1,6 @@
+Version 4.1
+ - Adaptative (activated by default) strategies. See SAT 2016 paper.
+
 Version 4.0
  - Add a Multithread version, called syrup (many glucose ;-)
    See SAT14 paper: Lazy Clause Exchange Policy for parallel SAT solvers.

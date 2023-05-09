@@ -54,8 +54,53 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 using namespace Glucose;
 
-  void SolverConfiguration::configure(MultiSolvers *ms, int nbsolvers) {
 
+void SolverConfiguration::configure(MultiSolvers *ms, int nbsolvers) {
+    for(int i = 1;i<nbsolvers;i++) { // Configuration for the sat race 2015
+        ms->solvers[i]->randomizeFirstDescent = true;
+        ms->solvers[i]->adaptStrategies = (i%2==0); // Just half of the cores are in adaptive mode
+        ms->solvers[i]->forceUnsatOnNewDescent = (i%4==0); // Just half of adaptive cores have the unsat force
+    }
+    if (nbsolvers > 8) { // configuration for the second phase of the sat race 2015
+        for(int i=0;i<nbsolvers;i++) { // we have like 32 threads, so we need to export just very good clauses
+            ms->solvers[i]->goodlimitlbd = 5;
+            ms->solvers[i]->goodlimitsize = 15;
+        }
+    }
+
+}
+
+        
+void SolverConfiguration::configureSAT15Adapt(MultiSolvers *ms, int nbsolvers) {
+    for(int i = 1;i<nbsolvers;i++) { // Configuration for the sat race 2015
+        ms->solvers[i]->randomizeFirstDescent = true;
+        ms->solvers[i]->adaptStrategies = (i%2==0); // Just half of the cores are in adaptive mode
+    }
+    if (nbsolvers > 8) { // configuration for the second phase of the sat race 2015
+        for(int i=0;i<nbsolvers;i++) { // we have like 32 threads, so we need to export just very good clauses
+            ms->solvers[i]->goodlimitlbd = 5;
+            ms->solvers[i]->goodlimitsize = 15;
+        }
+    }
+}
+
+
+void SolverConfiguration::configureSAT15Default(MultiSolvers *ms, int nbsolvers) {
+    for(int i = 1;i<nbsolvers;i++) 
+	ms->solvers[i]->randomizeFirstDescent = true;
+
+    if (nbsolvers > 8) { // configuration for the second phase of the sat race 2015
+	for(int i=0;i<nbsolvers;i++) { 
+	    ms->solvers[i]->goodlimitlbd = 5;
+	    ms->solvers[i]->goodlimitsize = 15;
+
+	}
+    }
+
+}
+
+void SolverConfiguration::configureSAT14(MultiSolvers *ms, int nbsolvers) {
+    
    if (nbsolvers < 2 ) return;
 
    ms->solvers[1]->var_decay = 0.94;
@@ -106,12 +151,12 @@ using namespace Glucose;
 
    if (nbsolvers < 9) return;
 
-   ms->solvers[8]->reduceOnSize = true;
+//   ms->solvers[8]->reduceOnSize = true; // NOT USED ANYMORE
 
    if (nbsolvers < 10 ) return;
 
-   ms->solvers[9]->reduceOnSize = true;
-   ms->solvers[9]->reduceOnSizeSize = 14;
+//   ms->solvers[9]->reduceOnSize = true; // NOT USED ANYMORE
+//   ms->solvers[9]->reduceOnSizeSize = 14;
 
    if (nbsolvers < 11 ) return;
 

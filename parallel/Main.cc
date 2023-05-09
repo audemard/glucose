@@ -92,7 +92,7 @@ static void SIGINT_exit(int signum) {
 int main(int argc, char** argv)
 {
     double realTimeStart = realTime();
-  printf("c\nc This is glucose-syrup 4.0 (glucose in many threads) --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
+  printf("c\nc This is glucose-syrup 4.1 (glucose in many threads) --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
     try {
         setUsageHelp("c USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n");
         // printf("This is MiniSat 2.0 beta\n");
@@ -107,6 +107,8 @@ int main(int argc, char** argv)
         IntOption    verb   ("MAIN", "verb",   "Verbosity level (0=silent, 1=some, 2=more).", 1, IntRange(0, 2));
         BoolOption   mod   ("MAIN", "model",   "show model.", false);
         IntOption    vv  ("MAIN", "vv",   "Verbosity every vv conflicts", 10000, IntRange(1,INT32_MAX));
+        BoolOption   pre    ("MAIN", "pre",    "Completely turn on/off any preprocessing.", true);
+
         IntOption    cpu_lim("MAIN", "cpu-lim","Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
         
@@ -179,14 +181,17 @@ int main(int argc, char** argv)
         //signal(SIGXCPU,SIGINT_interrupt);
  
         
-	int ret2 = msolver.simplify();    	
+	int ret2 = msolver.simplify();   
+        msolver.use_simplification = pre; 	
         if(ret2) 
-	   msolver.eliminate();
-        double simplified_time = cpuTime();
-        if (msolver.verbosity() > 0){
-            printf("c |  Simplification time:  %12.2f s                                                                 |\n", simplified_time - parsed_time);
-            printf("c |                                                                                                       |\n"); }
-
+            msolver.eliminate();
+        if(pre) {
+            double simplified_time = cpuTime();
+            if (msolver.verbosity() > 0){
+                printf("c |  Simplification time:  %12.2f s                                                                 |\n", simplified_time - parsed_time);
+                printf("c |                                                                                                       |\n"); }
+        }
+        
         if (!ret2 || !msolver.okay()){
             //if (S.certifiedOutput != NULL) fprintf(S.certifiedOutput, "0\n"), fclose(S.certifiedOutput);
             if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
@@ -233,9 +238,11 @@ int main(int argc, char** argv)
 	  
 	  if(msolver.getShowModel() && ret==l_True) {
 	    printf("v ");
-	    for (int i = 0; i < msolver.model.size() ; i++)
-	      if (msolver.model[i] != l_Undef)
+	    for (int i = 0; i < msolver.model.size() ; i++) {
+                assert(msolver.model[i] != l_Undef);
+                if (msolver.model[i] != l_Undef)
 		printf("%s%s%d", (i==0)?"":" ", (msolver.model[i]==l_True)?"":"-", i+1);
+            }
 	    printf(" 0\n");
 	  }
 

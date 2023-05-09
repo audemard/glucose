@@ -70,20 +70,23 @@ void printStats(Solver& solver)
     double cpu_time = cpuTime();
     double mem_used = 0;//memUsedPeak();
     printf("c restarts              : %" PRIu64" (%" PRIu64" conflicts in avg)\n", solver.starts,(solver.starts>0 ?solver.conflicts/solver.starts : 0));
-    printf("c blocked restarts      : %" PRIu64" (multiple: %" PRIu64") \n", solver.nbstopsrestarts,solver.nbstopsrestartssame);
-    printf("c last block at restart : %" PRIu64"\n",solver.lastblockatrestart);
-    printf("c nb ReduceDB           : %" PRIu64"\n", solver.nbReduceDB);
-    printf("c nb removed Clauses    : %" PRIu64"\n",solver.nbRemovedClauses);
-    printf("c nb learnts DL2        : %" PRIu64"\n", solver.nbDL2);
-    printf("c nb learnts size 2     : %" PRIu64"\n", solver.nbBin);
-    printf("c nb learnts size 1     : %" PRIu64"\n", solver.nbUn);
+    printf("c blocked restarts      : %" PRIu64" (multiple: %" PRIu64") \n", solver.stats[nbstopsrestarts],solver.stats[nbstopsrestartssame]);
+    printf("c last block at restart : %" PRIu64"\n",solver.stats[lastblockatrestart]);
+    printf("c nb ReduceDB           : %" PRIu64"\n", solver.stats[nbReduceDB]);
+    printf("c nb removed Clauses    : %" PRIu64"\n",solver.stats[nbRemovedClauses]);
+    printf("c nb learnts DL2        : %" PRIu64"\n", solver.stats[nbDL2]);
+    printf("c nb learnts size 2     : %" PRIu64"\n", solver.stats[nbBin]);
+    printf("c nb learnts size 1     : %" PRIu64"\n", solver.stats[nbUn]);
+    if(solver.chanseokStrategy)
+        printf("c nb permanent learnts  : %" PRIu64"\n", solver.stats[nbPermanentLearnts]);
 
     printf("c conflicts             : %-12" PRIu64"   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
-    printf("c decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
+    printf("c decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.stats[rnd_decisions]*100 / (float)solver.decisions, solver.decisions   /cpu_time);
     printf("c propagations          : %-12" PRIu64"   (%.0f /sec)\n", solver.propagations, solver.propagations/cpu_time);
-    printf("c conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", solver.tot_literals, (solver.max_literals - solver.tot_literals)*100 / (double)solver.max_literals);
-    printf("c nb reduced Clauses    : %" PRIu64"\n",solver.nbReducedClauses);
-    
+    //    printf("c conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", solver.stats[tot_literals], (solver.stats[max_literals] - solver.stats[tot_literals])*100 / (double)solver.stats[max_literals]);
+    //    printf("c Average resolutions   : %-12" PRIu64"   (%.0f seen ones)\n",solver.stats[sumRes]/solver.conflicts,((double)solver.stats[sumResSeen])/solver.conflicts);
+    printf("c nb reduced Clauses    : %" PRIu64"\n",solver.stats[nbReducedClauses]);
+
     if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
     printf("c CPU time              : %g s\n", cpu_time);
 }
@@ -112,12 +115,12 @@ static void SIGINT_exit(int signum) {
 int main(int argc, char** argv)
 {
     try {
-      printf("c\nc This is glucose 4.0 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
+      printf("c\nc This is glucose 4.1 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
 
-      
+
       setUsageHelp("c USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n");
-        
-        
+
+
 #if defined(__linux__)
         fpu_control_t oldcw, newcw;
         _FPU_GETCW(oldcw); newcw = (oldcw & ~_FPU_EXTENDED) | _FPU_DOUBLE; _FPU_SETCW(newcw);
@@ -136,27 +139,35 @@ int main(int argc, char** argv)
 
          BoolOption    opt_certified      (_certified, "certified",    "Certified UNSAT using DRUP format", false);
          StringOption  opt_certified_file      (_certified, "certified-output",    "Certified UNSAT output file", "NULL");
-         
+         BoolOption    opt_vbyte             (_certified, "vbyte",    "Emit proof in variable-byte encoding", false);
+
         parseOptions(argc, argv, true);
-        
+
         SimpSolver  S;
         double      initial_time = cpuTime();
 
         S.parsing = 1;
+        S.use_simplification = pre;
+
         //if (!pre) S.eliminate(true);
 
         S.verbosity = verb;
         S.verbEveryConflicts = vv;
-	S.showModel = mod;
-        
+	    S.showModel = mod;
+
         S.certifiedUNSAT = opt_certified;
+        S.vbyte = opt_vbyte;
         if(S.certifiedUNSAT) {
             if(!strcmp(opt_certified_file,"NULL")) {
-            S.certifiedOutput =  fopen("/dev/stdout", "wb");
-            } else {
-                S.certifiedOutput =  fopen(opt_certified_file, "wb");	    
-            }
-            fprintf(S.certifiedOutput,"o proof DRUP\n");
+                S.vbyte =  false;  // Cannot write binary to stdout
+                S.certifiedOutput =  fopen("/dev/stdout", "wb");
+                if(S.verbosity >= 1)
+                    printf("c\nc Write unsat proof on stdout using text format\nc\n");
+            } else
+                S.certifiedOutput =  fopen(opt_certified_file, "wb");
+                const char *name = opt_certified_file;
+                if(S.verbosity >= 1)
+                    printf("c\nc Write unsat proof on %s using %s format\nc\n",name,S.vbyte ? "binary" : "text");
         }
 
         solver = &S;
@@ -186,18 +197,18 @@ int main(int argc, char** argv)
                 if (setrlimit(RLIMIT_AS, &rl) == -1)
                     printf("c WARNING! Could not set resource limit: Virtual memory.\n");
             } }
-        
+
         if (argc == 1)
             printf("c Reading from standard input... Use '--help' for help.\n");
 
         gzFile in = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
         if (in == NULL)
             printf("ERROR! Could not open file: %s\n", argc == 1 ? "<stdin>" : argv[1]), exit(1);
-        
+
       if (S.verbosity > 0){
             printf("c ========================================[ Problem Statistics ]===========================================\n");
             printf("c |                                                                                                       |\n"); }
-        
+
         FILE* res = (argc >= 3) ? fopen(argv[argc-1], "wb") : NULL;
         parse_DIMACS(in, S);
         gzclose(in);
@@ -205,7 +216,7 @@ int main(int argc, char** argv)
        if (S.verbosity > 0){
             printf("c |  Number of variables:  %12d                                                                   |\n", S.nVars());
             printf("c |  Number of clauses:    %12d                                                                   |\n", S.nClauses()); }
-        
+
         double parsed_time = cpuTime();
         if (S.verbosity > 0){
             printf("c |  Parse time:           %12.2f s                                                                 |\n", parsed_time - initial_time);
@@ -234,7 +245,7 @@ int main(int argc, char** argv)
                printf("Solved by simplification\n");
                 printStats(S);
                 printf("\n"); }
-            printf("s UNSATISFIABLE\n");        
+            printf("s UNSATISFIABLE\n");
             exit(20);
         }
 
@@ -249,7 +260,7 @@ int main(int argc, char** argv)
 
         vec<Lit> dummy;
         lbool ret = S.solveLimited(dummy);
-        
+
         if (S.verbosity > 0){
             printStats(S);
             printf("\n"); }
@@ -272,14 +283,14 @@ int main(int argc, char** argv)
 	  if(S.showModel && ret==l_True) {
 	    printf("v ");
 	    for (int i = 0; i < S.nVars(); i++)
-	      if (S.model[i] != l_Undef)
+                if (S.model[i] != l_Undef)
 		printf("%s%s%d", (i==0)?"":" ", (S.model[i]==l_True)?"":"-", i+1);
-	    printf(" 0\n");
+              printf(" 0\n");
 	  }
 
-	}
 
-        if (S.certifiedUNSAT) fprintf(S.certifiedOutput, "0\n"), fclose(S.certifiedOutput);
+        }
+
 
 #ifdef NDEBUG
         exit(ret == l_True ? 10 : ret == l_False ? 20 : 0);     // (faster than "return", which will invoke the destructor for 'Solver')

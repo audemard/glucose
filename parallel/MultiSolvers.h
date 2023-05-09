@@ -104,6 +104,9 @@ public:
  
   }
 
+  bool use_simplification;
+
+  
  protected:
 	friend class ParallelSolver;
 	friend class SolverCompanion;

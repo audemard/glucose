@@ -135,6 +135,7 @@ class SimpSolver : public Solver {
     int     merges;
     int     asymm_lits;
     int     eliminated_vars;
+    bool                use_simplification;
 
  protected:
 
@@ -164,7 +165,6 @@ class SimpSolver : public Solver {
     // Solver state:
     //
     int                 elimorder;
-    bool                use_simplification;
     vec<uint32_t>       elimclauses;
     vec<char>           touched;
     OccLists<Var, vec<CRef>, ClauseDeleted>

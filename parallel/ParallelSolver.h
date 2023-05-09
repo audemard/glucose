@@ -55,6 +55,17 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "simp/SimpSolver.h"
 #include "parallel/SharedCompanion.h"
 namespace Glucose {
+    
+   enum ParallelStats{
+       nbexported=coreStatsSize,
+       nbimported,
+       nbexportedunit,
+       nbimportedunit,
+       nbimportedInPurgatory,
+       nbImportedGoodClauses
+   } ;
+#define parallelStatsSize (coreStatsSize + 6)
+ 
 //=================================================================================================
     //class MultiSolvers;
     //class SolverCompanion;
@@ -99,19 +110,16 @@ public:
     virtual lbool         solve_                   (bool do_simp = true, bool turn_off_simp = false);
 
     vec<Lit>    importedClause; // Temporary clause used to copy each imported clause
-    uint64_t    nbexported;
-    uint64_t    nbimported; 
-    uint64_t    nbexportedunit, nbimportedunit , nbimportedInPurgatory, nbImportedGoodClauses;
     unsigned int    goodlimitlbd; // LBD score of the "good" clauses, locally
     int    goodlimitsize;
     bool purgatory; // mode of operation
     bool shareAfterProbation; // Share any none glue clause only after probation (seen 2 times in conflict analysis)
     bool plingeling; // plingeling strategy for sharing clauses (experimental)
-
+    int nbTimesSeenBeforeExport;
     // Stats front end
-    uint64_t   getNbExported() { return nbexported;}
-    uint64_t   getNbImported() { return nbimported;}
-    uint64_t   getNbExportedUnit() {return nbexportedunit;}
+//    uint64_t   getNbExported() { return nbexported;}
+ //   uint64_t   getNbImported() { return nbimported;}
+ //   uint64_t   getNbExportedUnit() {return nbexportedunit;}
     
     uint32_t  firstSharing, limitSharingByGoodLBD, limitSharingByFixedLimitLBD, limitSharingByFixedLimitSize;
     uint32_t  probationByFollowingRoads, probationByFriend;

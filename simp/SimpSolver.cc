@@ -9,7 +9,7 @@
                                 Labri - Univ. Bordeaux, France
 
 Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
-Glucose (sources until 2013, Glucose 3.0, single core) are exactly the same as Minisat on which it 
+Glucose (sources until 2013, Glucose 3.0, single core) are exactly the same as Minisat on which it
 is based on. (see below).
 
 Glucose-Syrup sources are based on another copyright. Permissions and copyrights for the parallel
@@ -84,8 +84,8 @@ SimpSolver::SimpSolver() :
   , merges             (0)
   , asymm_lits         (0)
   , eliminated_vars    (0)
-  , elimorder          (1)
   , use_simplification (true)
+  , elimorder          (1)
   , occurs             (ClauseDeleted(ca))
   , elim_heap          (ElimLt(n_occ))
   , bwdsub_assigns     (0)
@@ -115,8 +115,8 @@ SimpSolver::SimpSolver(const SimpSolver &s) : Solver(s)
   , merges             (s.merges)
   , asymm_lits         (s.asymm_lits)
   , eliminated_vars    (s.eliminated_vars)
-  , elimorder          (s.elimorder)
   , use_simplification (s.use_simplification)
+  , elimorder          (s.elimorder)
   , occurs             (ClauseDeleted(ca))
   , elim_heap          (ElimLt(n_occ))
   , bwdsub_assigns     (s.bwdsub_assigns)
@@ -129,7 +129,7 @@ SimpSolver::SimpSolver(const SimpSolver &s) : Solver(s)
     remove_satisfied      = false;
     //End TODO  
     
-    
+
     s.elimclauses.memCopyTo(elimclauses);
     s.touched.memCopyTo(touched);
     s.occurs.copyTo(occurs);
@@ -220,9 +220,17 @@ bool SimpSolver::addClause_(vec<Lit>& ps)
         return false;
 
     if(!parsing && certifiedUNSAT) {
-      for (int i = 0; i < ps.size(); i++)
-        fprintf(certifiedOutput, "%i " , (var(ps[i]) + 1) * (-2 * sign(ps[i]) + 1) );
-      fprintf(certifiedOutput, "0\n");
+        if (vbyte) {
+            write_char('a');
+            for (int i = 0; i < ps.size(); i++)
+                write_lit(2*(var(ps[i])+1) + sign(ps[i]));
+            write_lit(0);
+        }
+        else {
+            for (int i = 0; i < ps.size(); i++)
+                fprintf(certifiedOutput, "%i " , (var(ps[i]) + 1) * (-2 * sign(ps[i]) + 1) );
+            fprintf(certifiedOutput, "0\n");
+        }
     }
 
     if (use_simplification && clauses.size() == nclauses + 1){
@@ -277,9 +285,17 @@ bool SimpSolver::strengthenClause(CRef cr, Lit l)
     subsumption_queue.insert(cr);
 
     if (certifiedUNSAT) {
-      for (int i = 0; i < c.size(); i++)
-        if (c[i] != l) fprintf(certifiedOutput, "%i " , (var(c[i]) + 1) * (-2 * sign(c[i]) + 1) );
-      fprintf(certifiedOutput, "0\n");
+        if (vbyte) {
+            write_char('a');
+            for (int i = 0; i < c.size(); i++)
+                if (c[i] != l) write_lit(2*(var(c[i])+1) + sign(c[i]));
+            write_lit(0);
+        }
+        else {
+            for (int i = 0; i < c.size(); i++)
+                if (c[i] != l) fprintf(certifiedOutput, "%i " , (var(c[i]) + 1) * (-2 * sign(c[i]) + 1) );
+            fprintf(certifiedOutput, "0\n");
+        }
     }
 
     if (c.size() == 2){
@@ -287,10 +303,18 @@ bool SimpSolver::strengthenClause(CRef cr, Lit l)
         c.strengthen(l);
     }else{
         if (certifiedUNSAT) {
-          fprintf(certifiedOutput, "d ");
-          for (int i = 0; i < c.size(); i++)
-            fprintf(certifiedOutput, "%i " , (var(c[i]) + 1) * (-2 * sign(c[i]) + 1) );
-          fprintf(certifiedOutput, "0\n");
+            if (vbyte) {
+                write_char('d');
+                for (int i = 0; i < c.size(); i++)
+                    write_lit(2*(var(c[i])+1) + sign(c[i]));
+                write_lit(0);
+            }
+            else {
+                fprintf(certifiedOutput, "d ");
+                for (int i = 0; i < c.size(); i++)
+                    fprintf(certifiedOutput, "%i " , (var(c[i]) + 1) * (-2 * sign(c[i]) + 1) );
+                fprintf(certifiedOutput, "0\n");
+            }
         }
 
         detachClause(cr, true);
@@ -584,7 +608,7 @@ bool SimpSolver::eliminateVar(Var v)
                 (++cnt > cls.size() + grow || (clause_lim != -1 && clause_size > clause_lim)))
                 return true;
 
-    // Delete and store old clauses:
+    // Delete and store old clauses
     eliminated[v] = true;
     setDecisionVar(v, false);
     eliminated_vars++;
@@ -661,7 +685,7 @@ void SimpSolver::extendModel()
     Lit x;
 
     if(model.size()==0) model.growTo(nVars());
-    
+
     for (i = elimclauses.size()-1; i > 0; i -= j){
         for (j = elimclauses[i--]; j > 1; j--, i--)
             if (modelValue(toLit(elimclauses[i])) != l_False)

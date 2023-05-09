@@ -152,22 +152,28 @@ inline lbool toLbool(int   v) { return lbool((uint8_t)v);  }
 class Clause;
 typedef RegionAllocator<uint32_t>::Ref CRef;
 
-#define BITS_LBD 13
-#define BITS_SIZEWITHOUTSEL 19
-#define BITS_REALSIZE 21
+#define BITS_LBD 20 
+#ifdef INCREMENTAL
+  #define BITS_SIZEWITHOUTSEL 19
+#endif
+#define BITS_REALSIZE 32
 class Clause {
     struct {
       unsigned mark       : 2;
       unsigned learnt     : 1;
-      unsigned szWithoutSelectors : BITS_SIZEWITHOUTSEL;
       unsigned canbedel   : 1;
       unsigned extra_size : 2; // extra size (end of 32bits) 0..3       
-      unsigned size       : BITS_REALSIZE;
       unsigned seen       : 1;
       unsigned reloced    : 1;
       unsigned exported   : 2; // Values to keep track of the clause status for exportations
       unsigned oneWatched : 1;
       unsigned lbd : BITS_LBD;
+
+      unsigned size       : BITS_REALSIZE;
+
+#ifdef INCREMENTAL
+      unsigned szWithoutSelectors : BITS_SIZEWITHOUTSEL;
+#endif
     }  header;
 
     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
@@ -181,7 +187,7 @@ class Clause {
         header.mark      = 0;
         header.learnt    = learnt;
         header.extra_size = _extra_size;
-        header.reloced   = 0;
+            header.reloced   = 0;
         header.size      = ps.size();
 	header.lbd = 0;
 	header.canbedel = 1;
@@ -221,6 +227,7 @@ public:
     header.size -= i; }
     void         pop         ()              { shrink(1); }
     bool         learnt      ()      const   { return header.learnt; }
+    void         nolearnt    ()              { header.learnt = false;}
     bool         has_extra   ()      const   { return header.extra_size > 0; }
     uint32_t     mark        ()      const   { return header.mark; }
     void         mark        (uint32_t m)    { header.mark = m; }
@@ -246,7 +253,7 @@ public:
 
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
-    void         setLBD(int i)  {if (i < (1<<(BITS_LBD-1))) header.lbd = i; else header.lbd = (1<<(BITS_LBD-1));} 
+    void         setLBD(int i)  {header.lbd=i; /*if (i < (1<<(BITS_LBD-1))) header.lbd = i; else header.lbd = (1<<(BITS_LBD-1));*/} 
     // unsigned int&       lbd    ()              { return header.lbd; }
     unsigned int        lbd    () const        { return header.lbd; }
     void setCanBeDel(bool b) {header.canbedel = b;}
@@ -257,8 +264,10 @@ public:
     unsigned int getExported() {return header.exported;}
     void setOneWatched(bool b) {header.oneWatched = b;}
     bool getOneWatched() {return header.oneWatched;}
+#ifdef INCREMNENTAL
     void setSizeWithoutSelectors   (unsigned int n)              {header.szWithoutSelectors = n; }
     unsigned int        sizeWithoutSelectors   () const        { return header.szWithoutSelectors; }
+#endif
 
 };
 
@@ -267,75 +276,79 @@ public:
 // ClauseAllocator -- a simple class for allocating memory for clauses:
 
 
-const CRef CRef_Undef = RegionAllocator<uint32_t>::Ref_Undef;
-class ClauseAllocator : public RegionAllocator<uint32_t>
-{
-    static int clauseWord32Size(int size, int extra_size){
-        return (sizeof(Clause) + (sizeof(Lit) * (size + extra_size))) / sizeof(uint32_t); }
- public:
-    bool extra_clause_field;
-
-    ClauseAllocator(uint32_t start_cap) : RegionAllocator<uint32_t>(start_cap), extra_clause_field(false){}
-    ClauseAllocator() : extra_clause_field(false){}
-
-    void moveTo(ClauseAllocator& to){
-        to.extra_clause_field = extra_clause_field;
-        RegionAllocator<uint32_t>::moveTo(to); }
-
-    template<class Lits>
-    CRef alloc(const Lits& ps, bool learnt = false, bool imported = false)
+    const CRef CRef_Undef = RegionAllocator<uint32_t>::Ref_Undef;
+    class ClauseAllocator : public RegionAllocator<uint32_t>
     {
-        assert(sizeof(Lit)      == sizeof(uint32_t));
-        assert(sizeof(float)    == sizeof(uint32_t));
-	
-        bool use_extra = learnt | extra_clause_field;
-        int extra_size = imported?3:(use_extra?1:0);
-        CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), extra_size));
-        new (lea(cid)) Clause(ps, extra_size, learnt);
+        static int clauseWord32Size(int size, int extra_size){
+            return (sizeof(Clause) + (sizeof(Lit) * (size + extra_size))) / sizeof(uint32_t); }
+    public:
+        bool extra_clause_field;
 
-        return cid;
-    }
+        ClauseAllocator(uint32_t start_cap) : RegionAllocator<uint32_t>(start_cap), extra_clause_field(false){}
+        ClauseAllocator() : extra_clause_field(false){}
 
-    // Deref, Load Effective Address (LEA), Inverse of LEA (AEL):
-    Clause&       operator[](Ref r)       { return (Clause&)RegionAllocator<uint32_t>::operator[](r); }
-    const Clause& operator[](Ref r) const { return (Clause&)RegionAllocator<uint32_t>::operator[](r); }
-    Clause*       lea       (Ref r)       { return (Clause*)RegionAllocator<uint32_t>::lea(r); }
-    const Clause* lea       (Ref r) const { return (Clause*)RegionAllocator<uint32_t>::lea(r); }
-    Ref           ael       (const Clause* t){ return RegionAllocator<uint32_t>::ael((uint32_t*)t); }
+        void moveTo(ClauseAllocator& to){
+            to.extra_clause_field = extra_clause_field;
+            RegionAllocator<uint32_t>::moveTo(to); }
 
-    void free(CRef cid)
-    {
-        Clause& c = operator[](cid);
-        RegionAllocator<uint32_t>::free(clauseWord32Size(c.size(), c.has_extra()));
-    }
+        template<class Lits>
+        CRef alloc(const Lits& ps, bool learnt = false, bool imported = false)
+        {
+            assert(sizeof(Lit)      == sizeof(uint32_t));
+            assert(sizeof(float)    == sizeof(uint32_t));
 
-    void reloc(CRef& cr, ClauseAllocator& to)
-    {
-        Clause& c = operator[](cr);
-        
-        if (c.reloced()) { cr = c.relocation(); return; }
-        
-        cr = to.alloc(c, c.learnt(), c.wasImported());
-        c.relocate(cr);
-        
-        // Copy extra data-fields: 
-        // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
-        to[cr].mark(c.mark());
-        if (to[cr].learnt())        {
-	  to[cr].activity() = c.activity();
-	  to[cr].setLBD(c.lbd());
-	  to[cr].setExported(c.getExported());
-	  to[cr].setOneWatched(c.getOneWatched());
-	  to[cr].setSeen(c.getSeen());
-	  to[cr].setSizeWithoutSelectors(c.sizeWithoutSelectors());
-	  to[cr].setCanBeDel(c.canBeDel());
-	  if (c.wasImported()) {
-             to[cr].setImportedFrom(c.importedFrom());
-	  }
-	}
-        else if (to[cr].has_extra()) to[cr].calcAbstraction();
-    }
-};
+            bool use_extra = learnt | extra_clause_field;
+            int extra_size = imported?3:(use_extra?1:0);
+            CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), extra_size));
+            new (lea(cid)) Clause(ps, extra_size, learnt);
+
+            return cid;
+        }
+
+        // Deref, Load Effective Address (LEA), Inverse of LEA (AEL):
+        Clause&       operator[](Ref r)       { return (Clause&)RegionAllocator<uint32_t>::operator[](r); }
+        const Clause& operator[](Ref r) const { return (Clause&)RegionAllocator<uint32_t>::operator[](r); }
+        Clause*       lea       (Ref r)       { return (Clause*)RegionAllocator<uint32_t>::lea(r); }
+        const Clause* lea       (Ref r) const { return (Clause*)RegionAllocator<uint32_t>::lea(r); }
+        Ref           ael       (const Clause* t){ return RegionAllocator<uint32_t>::ael((uint32_t*)t); }
+
+        void free(CRef cid)
+        {
+            Clause& c = operator[](cid);
+            RegionAllocator<uint32_t>::free(clauseWord32Size(c.size(), c.has_extra()));
+        }
+
+        void reloc(CRef& cr, ClauseAllocator& to)
+        {
+            Clause& c = operator[](cr);
+
+            if (c.reloced()) { cr = c.relocation(); return; }
+
+            cr = to.alloc(c, c.learnt(), c.wasImported());
+            c.relocate(cr);
+
+            // Copy extra data-fields:
+            // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
+            to[cr].mark(c.mark());
+            if (to[cr].learnt())        {
+                to[cr].activity() = c.activity();
+                to[cr].setLBD(c.lbd());
+                to[cr].setExported(c.getExported());
+                to[cr].setOneWatched(c.getOneWatched());
+#ifdef INCREMENTAL
+                to[cr].setSizeWithoutSelectors(c.sizeWithoutSelectors());
+#endif
+                to[cr].setCanBeDel(c.canBeDel());
+                if (c.wasImported()) {
+                    to[cr].setImportedFrom(c.importedFrom());
+                }
+            }
+            else {
+                to[cr].setSeen(c.getSeen());
+                if (to[cr].has_extra()) to[cr].calcAbstraction();
+            }
+        }
+    };
 
 
 //=================================================================================================

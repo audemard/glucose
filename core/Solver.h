@@ -62,11 +62,11 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 namespace Glucose {
 // Core stats 
-    
+
 enum CoreStats {
   sumResSeen,
   sumRes,
-  sumTrail,  
+  sumTrail,
   nbPromoted,
   originalClausesSeen,
   sumDecisionLevels,
@@ -87,10 +87,13 @@ enum CoreStats {
   learnts_literals,
   max_literals,
   tot_literals,
-  noDecisionConflict
+  noDecisionConflict,
+  lcmtested,
+    lcmreduced,
+    sumSizes
 } ;
 
-#define coreStatsSize 24
+#define coreStatsSize 27
 //=================================================================================================
 // Solver -- the main class:
 
@@ -104,24 +107,24 @@ public:
     //
     Solver();
     Solver(const  Solver &s);
-    
+
     virtual ~Solver();
-    
+
     /**
      * Clone function
      */
     virtual Clone* clone() const {
         return  new Solver(*this);
-    }   
+    }
 
     // Problem specification:
     //
     virtual Var     newVar    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
-    bool    addClause (const vec<Lit>& ps);                     // Add a clause to the solver. 
+    bool    addClause (const vec<Lit>& ps);                     // Add a clause to the solver.
     bool    addEmptyClause();                                   // Add the empty clause, making the solver contradictory.
-    bool    addClause (Lit p);                                  // Add a unit clause to the solver. 
-    bool    addClause (Lit p, Lit q);                           // Add a binary clause to the solver. 
-    bool    addClause (Lit p, Lit q, Lit r);                    // Add a ternary clause to the solver. 
+    bool    addClause (Lit p);                                  // Add a unit clause to the solver.
+    bool    addClause (Lit p, Lit q);                           // Add a binary clause to the solver.
+    bool    addClause (Lit p, Lit q, Lit r);                    // Add a ternary clause to the solver.
     virtual bool    addClause_(      vec<Lit>& ps);                     // Add a clause to the solver without making superflous internal copy. Will
                                                                 // change the passed vector 'ps'.
     // Solving:
@@ -143,14 +146,14 @@ public:
     void    toDimacs     (const char* file, Lit p);
     void    toDimacs     (const char* file, Lit p, Lit q);
     void    toDimacs     (const char* file, Lit p, Lit q, Lit r);
- 
+
     // Display clauses and literals
     void printLit(Lit l);
     void printClause(CRef c);
     void printInitialClause(CRef c);
-    
+
     // Variable mode:
-    // 
+    //
     void    setPolarity    (Var v, bool b); // Declare which polarity the decision heuristic should use for a variable. Requires mode 'polarity_user'.
     void    setDecisionVar (Var v, bool b); // Declare if a variable should be eligible for selection in the decision heuristic.
 
@@ -198,7 +201,7 @@ public:
     int       verbosity;
     int       verbEveryConflicts;
     int       showModel;
-    
+
     // Constants For restarts
     double    K;
     double    R;
@@ -215,6 +218,8 @@ public:
     // Constant for reducing clause
     int          lbSizeMinimizingClause;
     unsigned int lbLBDMinimizingClause;
+    bool useLCM; // See ijcai17 (Chu Min Li paper, related to vivif).
+    bool LCMUpdateLBD; // Updates the LBD when shrinking/replacing a clause with the vivification
 
     // Constant for heuristic
     double    var_decay;
@@ -228,7 +233,7 @@ public:
     bool      rnd_init_act;       // Initialize variable activities with a small random value.
     bool      randomizeFirstDescent; // the first decisions (until first cnflict) are made randomly
                                      // Useful for syrup!
-    
+
     // Constant for Memory managment
     double    garbage_frac;       // The fraction of wasted memory allowed before a garbage collection is triggered.
 
@@ -240,17 +245,17 @@ public:
 
     void write_char (unsigned char c);
     void write_lit (int n);
+    template <typename T> void addToDrat(T & lits, bool add);
 
-
-    // Panic mode. 
+    // Panic mode.
     // Save memory
     uint32_t panicModeLastRemoved, panicModeLastRemovedShared;
-    
+
     bool useUnaryWatched;            // Enable unary watched literals
     bool promoteOneWatchedClause;    // One watched clauses are promotted to two watched clauses if found empty
-    
+
     // Functions useful for multithread solving
-    // Useless in the sequential case 
+    // Useless in the sequential case
     // Overide in ParallelSolver
     virtual void parallelImportClauseDuringConflictAnalysis(Clause &c,CRef confl);
     virtual bool parallelImportClauses(); // true if the empty clause was received
@@ -259,13 +264,13 @@ public:
     virtual void parallelExportClauseDuringSearch(Clause &c);
     virtual bool parallelJobIsFinished();
     virtual bool panicModeIsEnabled();
-    
-    
+
+
     double luby(double y, int x);
-    
-    // Statistics 
+
+    // Statistics
     vec<uint64_t> stats;
-    
+
     // Important stats completely related to search. Keep here
     uint64_t solves,starts,decisions,propagations,conflicts,conflictsRestarts;
 
@@ -331,7 +336,9 @@ protected:
     vec<CRef>           clauses;          // List of problem clauses.
     vec<CRef>           learnts;          // List of learnt clauses.
     vec<CRef>           permanentLearnts; // The list of learnts clauses kept permanently
+    vec<CRef>           permanentLearntsReduced; // The list of learnts clauses kept permanently that have been reduced by LCM
     vec<CRef>           unaryWatchedClauses;  // List of imported clauses (after the purgatory) // TODO put inside ParallelSolver
+    vec<CRef>           mostActiveClauses; // Used to keep most active clauses (instead of removing them)
 
     vec<lbool>          assigns;          // The current assignments.
     vec<char>           polarity;         // The preferred polarity of each variable.
@@ -351,15 +358,15 @@ protected:
     double              progress_estimate;// Set by 'search()'.
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
     vec<unsigned int>   permDiff;           // permDiff[var] contains the current conflict number... Used to count the number of  LBD
-    
+
 
     // UPDATEVARACTIVITY trick (see competition'09 companion paper)
-    vec<Lit> lastDecisionLevel; 
+    vec<Lit> lastDecisionLevel;
 
     ClauseAllocator     ca;
 
     int nbclausesbeforereduce;            // To know when it is time to reduce clause database
-    
+
     // Used for restart strategies
     bqueue<unsigned int> trailQueue,lbdQueue; // Bounded queues for restarts.
     float sumLBD; // used to compute the global average of LBD. Restarts...
@@ -462,6 +469,35 @@ protected:
     // Returns a random integer 0 <= x < size. Seed must never be 0.
     static inline int irand(double& seed, int size) {
         return (int)(drand(seed) * size); }
+
+
+    // simplify
+    //
+public:
+    bool	simplifyAll();
+    void	simplifyLearnt(Clause& c);
+    int		trailRecord;
+    void	litsEnqueue(int cutP, Clause& c);
+    void	cancelUntilTrailRecord();
+    void	simpleUncheckEnqueue(Lit p, CRef from = CRef_Undef);
+    CRef    simplePropagate();
+    CRef    simplePropagateUnaryWatches(Lit p);
+
+    vec<Lit> simp_learnt_clause;
+    vec<CRef> simp_reason_clause;
+    void	simpleAnalyze(CRef confl, vec<Lit>& out_learnt, vec<CRef>& reason_clause, bool True_confl);
+    // sort learnt clause literal by litValue
+
+    // in redundant
+    bool removed(CRef cr);
+    int performLCM;
+
+    //// test
+    vec<int> valueDup;
+    void compareValue();
+    void wholeCompareValue();
+
+
 };
 
 
@@ -507,12 +543,12 @@ inline bool     Solver::addEmptyClause  ()                      { add_tmp.clear(
 inline bool     Solver::addClause       (Lit p)                 { add_tmp.clear(); add_tmp.push(p); return addClause_(add_tmp); }
 inline bool     Solver::addClause       (Lit p, Lit q)          { add_tmp.clear(); add_tmp.push(p); add_tmp.push(q); return addClause_(add_tmp); }
 inline bool     Solver::addClause       (Lit p, Lit q, Lit r)   { add_tmp.clear(); add_tmp.push(p); add_tmp.push(q); add_tmp.push(r); return addClause_(add_tmp); }
- inline bool     Solver::locked          (const Clause& c) const { 
-   if(c.size()>2) 
-     return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && ca.lea(reason(var(c[0]))) == &c; 
-   return 
+ inline bool     Solver::locked          (const Clause& c) const {
+   if(c.size()>2)
+     return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && ca.lea(reason(var(c[0]))) == &c;
+   return
      (value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && ca.lea(reason(var(c[0]))) == &c)
-     || 
+     ||
      (value(c[1]) == l_True && reason(var(c[1])) != CRef_Undef && ca.lea(reason(var(c[1]))) == &c);
  }
 inline void     Solver::newDecisionLevel()                      { trail_lim.push(trail.size()); }
@@ -527,12 +563,12 @@ inline int      Solver::nAssigns      ()      const   { return trail.size(); }
 inline int      Solver::nClauses      ()      const   { return clauses.size(); }
 inline int      Solver::nLearnts      ()      const   { return learnts.size(); }
 inline int      Solver::nVars         ()      const   { return vardata.size(); }
-inline int      Solver::nFreeVars     ()         { 
+inline int      Solver::nFreeVars     ()         {
     int a = stats[dec_vars];
     return (int)(a) - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]); }
 inline void     Solver::setPolarity   (Var v, bool b) { polarity[v] = b; }
-inline void     Solver::setDecisionVar(Var v, bool b) 
-{ 
+inline void     Solver::setDecisionVar(Var v, bool b)
+{
     if      ( b && !decision[v]) stats[dec_vars]++;
     else if (!b &&  decision[v]) stats[dec_vars]--;
 
@@ -566,6 +602,43 @@ inline void     Solver::toDimacs     (const char* file, Lit p, Lit q){ vec<Lit> 
 inline void     Solver::toDimacs     (const char* file, Lit p, Lit q, Lit r){ vec<Lit> as; as.push(p); as.push(q); as.push(r); toDimacs(file, as); }
 
 
+/************************************************************
+ * Compute LBD functions
+ *************************************************************/
+
+template <typename T>inline unsigned int Solver::computeLBD(const T &lits, int end) {
+    int nblevels = 0;
+    MYFLAG++;
+#ifdef INCREMENTAL
+    if(incremental) { // ----------------- INCREMENTAL MODE
+      if(end==-1) end = lits.size();
+      int nbDone = 0;
+      for(int i=0;i<lits.size();i++) {
+        if(nbDone>=end) break;
+        if(isSelector(var(lits[i]))) continue;
+        nbDone++;
+        int l = level(var(lits[i]));
+        if (permDiff[l] != MYFLAG) {
+      permDiff[l] = MYFLAG;
+      nblevels++;
+        }
+      }
+    } else { // -------- DEFAULT MODE. NOT A LOT OF DIFFERENCES... BUT EASIER TO READ
+#endif
+    for(int i = 0; i < lits.size(); i++) {
+        int l = level(var(lits[i]));
+        if(permDiff[l] != MYFLAG) {
+            permDiff[l] = MYFLAG;
+            nblevels++;
+        }
+    }
+#ifdef INCREMENTAL
+    }
+#endif
+    return nblevels;
+}
+
+
 
 //=================================================================================================
 // Debug etc:
@@ -596,6 +669,28 @@ inline void Solver::printInitialClause(CRef cr)
       }
     }
 }
+
+template <typename T>inline void Solver::addToDrat(T &lits, bool add) {
+    if(vbyte) {
+        if(add)
+            write_char('a');
+        else
+            write_char('d');
+        for(int i = 0; i < lits.size(); i++)
+            write_lit(2 * (var(lits[i]) + 1) + sign(lits[i]));
+        write_lit(0);
+    }
+    else {
+        if(!add)
+            fprintf(certifiedOutput, "d ");
+
+        for(int i = 0; i < lits.size(); i++)
+            fprintf(certifiedOutput, "%i ", (var(lits[i]) + 1) * (-2 * sign(lits[i]) + 1));
+        fprintf(certifiedOutput, "0\n");
+    }
+}
+
+
 
 //=================================================================================================
 struct reduceDBAct_lt {
@@ -639,7 +734,7 @@ struct reduceDB_lt {
         return ca[x].activity() < ca[y].activity();
         //return x->size() < y->size();
 
-        //return ca[x].size() > 2 && (ca[y].size() == 2 || ca[x].activity() < ca[y].activity()); } 
+        //return ca[x].size() > 2 && (ca[y].size() == 2 || ca[x].activity() < ca[y].activity()); }
     }
 };
 

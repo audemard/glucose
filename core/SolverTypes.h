@@ -152,7 +152,7 @@ inline lbool toLbool(int   v) { return lbool((uint8_t)v);  }
 class Clause;
 typedef RegionAllocator<uint32_t>::Ref CRef;
 
-#define BITS_LBD 20 
+#define BITS_LBD 19
 #ifdef INCREMENTAL
   #define BITS_SIZEWITHOUTSEL 19
 #endif
@@ -167,6 +167,8 @@ class Clause {
       unsigned reloced    : 1;
       unsigned exported   : 2; // Values to keep track of the clause status for exportations
       unsigned oneWatched : 1;
+      //simplify
+      unsigned simplified : 1;
       unsigned lbd : BITS_LBD;
 
       unsigned size       : BITS_REALSIZE;
@@ -183,7 +185,7 @@ class Clause {
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
     template<class V>
     Clause(const V& ps, int _extra_size, bool learnt) {
-	assert(_extra_size < (1<<2));
+	assert(_extra_size < 3);
         header.mark      = 0;
         header.learnt    = learnt;
         header.extra_size = _extra_size;
@@ -193,7 +195,9 @@ class Clause {
 	header.canbedel = 1;
 	header.exported = 0; 
 	header.oneWatched = 0;
-	header.seen = 0;
+    header.simplified = 0;
+
+        header.seen = 0;
         for (int i = 0; i < ps.size(); i++) 
             data[i].lit = ps[i];
 	
@@ -221,7 +225,7 @@ public:
 						if (header.extra_size > 0) {
 						    data[header.size-i] = data[header.size];
 						    if (header.extra_size > 1) { // Special case for imported clauses
-							data[header.size-i-1] = data[header.size-1];
+							data[header.size-i+1] = data[header.size+1];
 						    }
 						}
     header.size -= i; }
@@ -264,7 +268,13 @@ public:
     unsigned int getExported() {return header.exported;}
     void setOneWatched(bool b) {header.oneWatched = b;}
     bool getOneWatched() {return header.oneWatched;}
-#ifdef INCREMNENTAL
+
+    // simplify
+    //
+    void setSimplified(bool b) { header.simplified = b; }
+    bool simplified() { return header.simplified; }
+
+#ifdef INCREMENTAL
     void setSizeWithoutSelectors   (unsigned int n)              {header.szWithoutSelectors = n; }
     unsigned int        sizeWithoutSelectors   () const        { return header.szWithoutSelectors; }
 #endif
@@ -298,7 +308,7 @@ public:
             assert(sizeof(float)    == sizeof(uint32_t));
 
             bool use_extra = learnt | extra_clause_field;
-            int extra_size = imported?3:(use_extra?1:0);
+            int extra_size = imported?2:(use_extra?1:0);
             CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), extra_size));
             new (lea(cid)) Clause(ps, extra_size, learnt);
 
@@ -335,6 +345,10 @@ public:
                 to[cr].setLBD(c.lbd());
                 to[cr].setExported(c.getExported());
                 to[cr].setOneWatched(c.getOneWatched());
+                // simplify
+                //
+                to[cr].setSimplified(c.simplified());
+
 #ifdef INCREMENTAL
                 to[cr].setSizeWithoutSelectors(c.sizeWithoutSelectors());
 #endif

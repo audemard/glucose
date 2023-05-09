@@ -74,6 +74,7 @@ void printStats(Solver& solver)
     printf("c last block at restart : %" PRIu64"\n",solver.stats[lastblockatrestart]);
     printf("c nb ReduceDB           : %" PRIu64"\n", solver.stats[nbReduceDB]);
     printf("c nb removed Clauses    : %" PRIu64"\n",solver.stats[nbRemovedClauses]);
+    printf("c average learnt size   : %" PRIu64"\n", solver.conflicts == 0 ? 0 : solver.stats[sumSizes]/solver.conflicts);
     printf("c nb learnts DL2        : %" PRIu64"\n", solver.stats[nbDL2]);
     printf("c nb learnts size 2     : %" PRIu64"\n", solver.stats[nbBin]);
     printf("c nb learnts size 1     : %" PRIu64"\n", solver.stats[nbUn]);
@@ -86,7 +87,7 @@ void printStats(Solver& solver)
     //    printf("c conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", solver.stats[tot_literals], (solver.stats[max_literals] - solver.stats[tot_literals])*100 / (double)solver.stats[max_literals]);
     //    printf("c Average resolutions   : %-12" PRIu64"   (%.0f seen ones)\n",solver.stats[sumRes]/solver.conflicts,((double)solver.stats[sumResSeen])/solver.conflicts);
     printf("c nb reduced Clauses    : %" PRIu64"\n",solver.stats[nbReducedClauses]);
-
+    printf("c LCM                   : %" PRIu64" / %" PRIu64" \n", solver.stats[lcmreduced],solver.stats[lcmtested]);
     if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
     printf("c CPU time              : %g s\n", cpu_time);
 }
@@ -115,7 +116,7 @@ static void SIGINT_exit(int signum) {
 int main(int argc, char** argv)
 {
     try {
-      printf("c\nc This is glucose 4.1 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
+      printf("c\nc This is glucose 4.2.1 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
 
 
       setUsageHelp("c USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n");

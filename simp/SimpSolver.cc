@@ -219,19 +219,8 @@ bool SimpSolver::addClause_(vec<Lit>& ps)
     if (!Solver::addClause_(ps))
         return false;
 
-    if(!parsing && certifiedUNSAT) {
-        if (vbyte) {
-            write_char('a');
-            for (int i = 0; i < ps.size(); i++)
-                write_lit(2*(var(ps[i])+1) + sign(ps[i]));
-            write_lit(0);
-        }
-        else {
-            for (int i = 0; i < ps.size(); i++)
-                fprintf(certifiedOutput, "%i " , (var(ps[i]) + 1) * (-2 * sign(ps[i]) + 1) );
-            fprintf(certifiedOutput, "0\n");
-        }
-    }
+    if(!parsing && certifiedUNSAT)
+        addToDrat(ps, true);
 
     if (use_simplification && clauses.size() == nclauses + 1){
         CRef          cr = clauses.last();
@@ -302,20 +291,8 @@ bool SimpSolver::strengthenClause(CRef cr, Lit l)
         removeClause(cr);
         c.strengthen(l);
     }else{
-        if (certifiedUNSAT) {
-            if (vbyte) {
-                write_char('d');
-                for (int i = 0; i < c.size(); i++)
-                    write_lit(2*(var(c[i])+1) + sign(c[i]));
-                write_lit(0);
-            }
-            else {
-                fprintf(certifiedOutput, "d ");
-                for (int i = 0; i < c.size(); i++)
-                    fprintf(certifiedOutput, "%i " , (var(c[i]) + 1) * (-2 * sign(c[i]) + 1) );
-                fprintf(certifiedOutput, "0\n");
-            }
-        }
+        if (certifiedUNSAT)
+            addToDrat(c, false);
 
         detachClause(cr, true);
         c.strengthen(l);

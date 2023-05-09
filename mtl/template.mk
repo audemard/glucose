@@ -19,8 +19,8 @@ RCOBJS     = $(addsuffix r,  $(COBJS))
 
 #CXX        ?= /usr/gcc-/bin/g++-4.7.0
 CXX       ?= g++
-CFLAGS    ?= -Wall -Wno-parentheses
-LFLAGS    ?= -Wall
+CFLAGS    ?= -Wall -Wno-parentheses -std=c++11
+LFLAGS    ?= -Wall -lpthread 
 
 COPTIMIZE ?= -O3
 

@@ -1,12 +1,33 @@
-/****************************************************************************************[Solver.h]
- Glucose -- Copyright (c) 2009, Gilles Audemard, Laurent Simon
-				CRIL - Univ. Artois, France
-				LRI  - Univ. Paris Sud, France
- 
-Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
-Glucose are exactly the same as Minisat on which it is based on. (see below).
+/***************************************************************************************[Solver.h]
+ Glucose -- Copyright (c) 2009-2014, Gilles Audemard, Laurent Simon
+                                CRIL - Univ. Artois, France
+                                LRI  - Univ. Paris Sud, France (2009-2013)
+                                Labri - Univ. Bordeaux, France
 
----------------
+ Syrup (Glucose Parallel) -- Copyright (c) 2013-2014, Gilles Audemard, Laurent Simon
+                                CRIL - Univ. Artois, France
+                                Labri - Univ. Bordeaux, France
+
+Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
+Glucose (sources until 2013, Glucose 3.0, single core) are exactly the same as Minisat on which it 
+is based on. (see below).
+
+Glucose-Syrup sources are based on another copyright. Permissions and copyrights for the parallel
+version of Glucose-Syrup (the "Software") are granted, free of charge, to deal with the Software
+without restriction, including the rights to use, copy, modify, merge, publish, distribute,
+sublicence, and/or sell copies of the Software, and to permit persons to whom the Software is 
+furnished to do so, subject to the following conditions:
+
+- The above and below copyrights notices and this permission notice shall be included in all
+copies or substantial portions of the Software;
+- The parallel version of Glucose (all files modified since Glucose 3.0 releases, 2013) cannot
+be used in any competitive event (sat competitions/evaluations) without the express permission of 
+the authors (Gilles Audemard / Laurent Simon). This is also the case for any competitive event
+using Glucose Parallel as an embedded SAT engine (single core or not).
+
+
+--------------- Original Minisat Copyrights
+
 Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 Copyright (c) 2007-2010, Niklas Sorensson
 
@@ -24,18 +45,18 @@ NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPO
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-**************************************************************************************************/
+ **************************************************************************************************/
 
 #ifndef Glucose_Solver_h
 #define Glucose_Solver_h
 
-#include "mtl/Vec.h"
 #include "mtl/Heap.h"
 #include "mtl/Alg.h"
 #include "utils/Options.h"
 #include "core/SolverTypes.h"
 #include "core/BoundedQueue.h"
 #include "core/Constants.h"
+#include "mtl/Clone.h"
 
 
 namespace Glucose {
@@ -43,24 +64,35 @@ namespace Glucose {
 //=================================================================================================
 // Solver -- the main class:
 
-class Solver {
+class Solver : public Clone {
+
+    friend class SolverConfiguration;
+
 public:
 
     // Constructor/Destructor:
     //
     Solver();
+    Solver(const  Solver &s);
+    
     virtual ~Solver();
+    
+    /**
+     * Clone function
+     */
+    virtual Clone* clone() const {
+        return  new Solver(*this);
+    }   
 
     // Problem specification:
     //
-    Var     newVar    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
-
+    virtual Var     newVar    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
     bool    addClause (const vec<Lit>& ps);                     // Add a clause to the solver. 
     bool    addEmptyClause();                                   // Add the empty clause, making the solver contradictory.
     bool    addClause (Lit p);                                  // Add a unit clause to the solver. 
     bool    addClause (Lit p, Lit q);                           // Add a binary clause to the solver. 
     bool    addClause (Lit p, Lit q, Lit r);                    // Add a ternary clause to the solver. 
-    bool    addClause_(      vec<Lit>& ps);                     // Add a clause to the solver without making superflous internal copy. Will
+    virtual bool    addClause_(      vec<Lit>& ps);                     // Add a clause to the solver without making superflous internal copy. Will
                                                                 // change the passed vector 'ps'.
 
     // Solving:
@@ -74,17 +106,19 @@ public:
     bool    solve        (Lit p, Lit q, Lit r);     // Search for a model that respects three assumptions.
     bool    okay         () const;                  // FALSE means solver is in a conflicting state
 
+       // Convenience versions of 'toDimacs()':
     void    toDimacs     (FILE* f, const vec<Lit>& assumps);            // Write CNF to file in DIMACS-format.
     void    toDimacs     (const char *file, const vec<Lit>& assumps);
     void    toDimacs     (FILE* f, Clause& c, vec<Var>& map, Var& max);
-    void printLit(Lit l);
-    void printClause(CRef c);
-    void printInitialClause(CRef c);
-    // Convenience versions of 'toDimacs()':
     void    toDimacs     (const char* file);
     void    toDimacs     (const char* file, Lit p);
     void    toDimacs     (const char* file, Lit p, Lit q);
     void    toDimacs     (const char* file, Lit p, Lit q, Lit r);
+ 
+    // Display clauses and literals
+    void printLit(Lit l);
+    void printClause(CRef c);
+    void printInitialClause(CRef c);
     
     // Variable mode:
     // 
@@ -103,11 +137,13 @@ public:
     int     nVars      ()      const;       // The current number of variables.
     int     nFreeVars  ()      const;
 
+    inline char valuePhase(Var v) {return polarity[v];}
+
     // Incremental mode
     void setIncrementalMode();
     void initNbInitialVars(int nb);
     void printIncrementalStats();
-
+    bool isIncremental();
     // Resource contraints:
     //
     void    setConfBudget(int64_t x);
@@ -122,9 +158,6 @@ public:
     void    checkGarbage(double gf);
     void    checkGarbage();
 
-
-
-
     // Extra results: (read-only member variable)
     //
     vec<lbool> model;             // If problem is satisfiable, this vector contains the model (if any).
@@ -136,6 +169,7 @@ public:
     int       verbosity;
     int       verbEveryConflicts;
     int       showModel;
+    
     // Constants For restarts
     double    K;
     double    R;
@@ -143,16 +177,18 @@ public:
     double    sizeTrailQueue;
 
     // Constants for reduce DB
-    int firstReduceDB;
-    int incReduceDB;
-    int specialIncReduceDB;
+    int          firstReduceDB;
+    int          incReduceDB;
+    int          specialIncReduceDB;
     unsigned int lbLBDFrozenClause;
 
     // Constant for reducing clause
-    int lbSizeMinimizingClause;
+    int          lbSizeMinimizingClause;
     unsigned int lbLBDMinimizingClause;
 
+    // Constant for heuristic
     double    var_decay;
+    double    max_var_decay;
     double    clause_decay;
     double    random_var_freq;
     double    random_seed;
@@ -160,19 +196,44 @@ public:
     int       phase_saving;       // Controls the level of phase saving (0=none, 1=limited, 2=full).
     bool      rnd_pol;            // Use random polarities for branching heuristics.
     bool      rnd_init_act;       // Initialize variable activities with a small random value.
+    
+    // Constant for Memory managment
     double    garbage_frac;       // The fraction of wasted memory allowed before a garbage collection is triggered.
 
     // Certified UNSAT ( Thanks to Marijn Heule)
     FILE*               certifiedOutput;
     bool                certifiedUNSAT;
 
+    // Panic mode. 
+    // Save memory
+    uint32_t panicModeLastRemoved, panicModeLastRemovedShared;
     
+    bool useUnaryWatched;            // Enable unary watched literals
+    bool promoteOneWatchedClause;    // One watched clauses are promotted to two watched clauses if found empty
+    
+    // Functions useful for multithread solving
+    // Useless in the sequential case 
+    // Overide in ParallelSolver
+    virtual void parallelImportClauseDuringConflictAnalysis(Clause &c,CRef confl);
+    virtual bool parallelImportClauses(); // true if the empty clause was received
+    virtual void parallelImportUnaryClauses();
+    virtual void parallelExportUnaryClause(Lit p);
+    virtual void parallelExportClauseDuringSearch(Clause &c);
+    virtual bool parallelJobIsFinished();
+    virtual bool panicModeIsEnabled();
+    
+    
+
     // Statistics: (read-only member variable)
+    uint64_t    nbPromoted;          // Number of clauses from unary to binary watch scheme
+    uint64_t    originalClausesSeen; // Number of original clauses seen
+    uint64_t    sumDecisionLevels;
     //
-    uint64_t nbRemovedClauses,nbReducedClauses,nbDL2,nbBin,nbUn,nbReduceDB,solves, starts, decisions, rnd_decisions, propagations, conflicts,conflictsRestarts,nbstopsrestarts,nbstopsrestartssame,lastblockatrestart;
+    uint64_t nbRemovedClauses,nbRemovedUnaryWatchedClauses, nbReducedClauses,nbDL2,nbBin,nbUn,nbReduceDB,solves, starts, decisions, rnd_decisions, propagations, conflicts,conflictsRestarts,nbstopsrestarts,nbstopsrestartssame,lastblockatrestart;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
 protected:
+
     long curRestart;
     // Helper structures:
     //
@@ -185,6 +246,12 @@ protected:
         Watcher(CRef cr, Lit p) : cref(cr), blocker(p) {}
         bool operator==(const Watcher& w) const { return cref == w.cref; }
         bool operator!=(const Watcher& w) const { return cref != w.cref; }
+/*        Watcher &operator=(Watcher w) {
+            this->cref = w.cref;
+            this->blocker = w.blocker;
+            return *this;
+        }
+*/
     };
 
     struct WatcherDeleted
@@ -203,7 +270,7 @@ protected:
 
     // Solver state:
     //
-    int lastIndexRed;
+    int                lastIndexRed;
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
     double              cla_inc;          // Amount to bump next clause with.
     vec<double>         activity;         // A heuristic measurement of the activity of a variable.
@@ -212,14 +279,17 @@ protected:
                         watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
     OccLists<Lit, vec<Watcher>, WatcherDeleted>
                         watchesBin;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
+    OccLists<Lit, vec<Watcher>, WatcherDeleted>
+                        unaryWatches;       //  Unary watch scheme (clauses are seen when they become empty
     vec<CRef>           clauses;          // List of problem clauses.
     vec<CRef>           learnts;          // List of learnt clauses.
+    vec<CRef>           unaryWatchedClauses;  // List of imported clauses (after the purgatory) // TODO put inside ParallelSolver
 
     vec<lbool>          assigns;          // The current assignments.
     vec<char>           polarity;         // The preferred polarity of each variable.
     vec<char>           decision;         // Declares if a variable is eligible for selection in the decision heuristic.
     vec<Lit>            trail;            // Assignment stack; stores all assigments made in the order they were made.
-        vec<int>            nbpos;
+    vec<int>            nbpos;
     vec<int>            trail_lim;        // Separator indices for different decision levels in 'trail'.
     vec<VarData>        vardata;          // Stores reason and level for each variable.
     int                 qhead;            // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
@@ -229,20 +299,23 @@ protected:
     Heap<VarOrderLt>    order_heap;       // A priority queue of variables ordered with respect to the variable activity.
     double              progress_estimate;// Set by 'search()'.
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
-    vec<unsigned int> permDiff;      // permDiff[var] contains the current conflict number... Used to count the number of  LBD
+    bool reduceOnSize;
+    int  reduceOnSizeSize;                // See XMinisat paper
+    vec<unsigned int>   permDiff;           // permDiff[var] contains the current conflict number... Used to count the number of  LBD
     
-#ifdef UPDATEVARACTIVITY
+
     // UPDATEVARACTIVITY trick (see competition'09 companion paper)
     vec<Lit> lastDecisionLevel; 
-#endif
 
     ClauseAllocator     ca;
 
     int nbclausesbeforereduce;            // To know when it is time to reduce clause database
     
+    // Used for restart strategies
     bqueue<unsigned int> trailQueue,lbdQueue; // Bounded queues for restarts.
     float sumLBD; // used to compute the global average of LBD. Restarts...
     int sumAssumptions;
+    CRef lastLearntClause;
 
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
@@ -254,7 +327,7 @@ protected:
     vec<Lit>            add_tmp;
     unsigned int  MYFLAG;
 
-
+    // Initial reduceDB strategy
     double              max_learnts;
     double              learntsize_adjust_confl;
     int                 learntsize_adjust_cnt;
@@ -264,7 +337,6 @@ protected:
     int64_t             conflict_budget;    // -1 means no budget.
     int64_t             propagation_budget; // -1 means no budget.
     bool                asynch_interrupt;
-
 
     // Variables added for incremental mode
     int incremental; // Use incremental SAT Solver
@@ -282,13 +354,14 @@ protected:
     void     uncheckedEnqueue (Lit p, CRef from = CRef_Undef);                         // Enqueue a literal. Assumes value of literal is undefined.
     bool     enqueue          (Lit p, CRef from = CRef_Undef);                         // Test if fact 'p' contradicts current state, enqueue otherwise.
     CRef     propagate        ();                                                      // Perform unit propagation. Returns possibly conflicting clause.
+    CRef     propagateUnaryWatches(Lit p);                                                  // Perform propagation on unary watches of p, can find only conflicts
     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
     void     analyze          (CRef confl, vec<Lit>& out_learnt, vec<Lit> & selectors, int& out_btlevel,unsigned int &nblevels,unsigned int &szWithoutSelectors);    // (bt = backtrack)
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
-    lbool    solve_           ();                                                      // Main solve method (assumptions given in 'assumptions').
-    void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
+    virtual lbool    solve_           (bool do_simp = true, bool turn_off_simp = false);                                                      // Main solve method (assumptions given in 'assumptions').
+    virtual void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
     void     rebuildOrderHeap ();
 
@@ -304,7 +377,9 @@ protected:
     //
     void     attachClause     (CRef cr);               // Attach a clause to watcher lists.
     void     detachClause     (CRef cr, bool strict = false); // Detach a clause to watcher lists.
-    void     removeClause     (CRef cr);               // Detach and free a clause.
+    void     detachClausePurgatory(CRef cr, bool strict = false);
+    void     attachClausePurgatory(CRef cr);
+    void     removeClause     (CRef cr, bool inPurgatory = false);               // Detach and free a clause.
     bool     locked           (const Clause& c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
     bool     satisfied        (const Clause& c) const; // Returns TRUE if a clause is satisfied in the current state.
 
@@ -312,7 +387,7 @@ protected:
     unsigned int computeLBD(const Clause &c);
     void minimisationWithBinaryResolution(vec<Lit> &out_learnt);
 
-    void     relocAll         (ClauseAllocator& to);
+    virtual void     relocAll         (ClauseAllocator& to);
 
     // Misc:
     //
@@ -439,6 +514,7 @@ inline void     Solver::toDimacs     (const char* file, Lit p, Lit q){ vec<Lit> 
 inline void     Solver::toDimacs     (const char* file, Lit p, Lit q, Lit r){ vec<Lit> as; as.push(p); as.push(q); as.push(r); toDimacs(file, as); }
 
 
+
 //=================================================================================================
 // Debug etc:
 
@@ -469,8 +545,37 @@ inline void Solver::printInitialClause(CRef cr)
     }
 }
 
-
 //=================================================================================================
+
+struct reduceDB_lt {
+    ClauseAllocator& ca;
+
+    reduceDB_lt(ClauseAllocator& ca_) : ca(ca_) {
+    }
+
+    bool operator()(CRef x, CRef y) {
+
+        // Main criteria... Like in MiniSat we keep all binary clauses
+        if (ca[x].size() > 2 && ca[y].size() == 2) return 1;
+
+        if (ca[y].size() > 2 && ca[x].size() == 2) return 0;
+        if (ca[x].size() == 2 && ca[y].size() == 2) return 0;
+
+        // Second one  based on literal block distance
+        if (ca[x].lbd() > ca[y].lbd()) return 1;
+        if (ca[x].lbd() < ca[y].lbd()) return 0;
+
+
+        // Finally we can use old activity or size, we choose the last one
+        return ca[x].activity() < ca[y].activity();
+        //return x->size() < y->size();
+
+        //return ca[x].size() > 2 && (ca[y].size() == 2 || ca[x].activity() < ca[y].activity()); } 
+    }
+};
+
+
 }
+
 
 #endif

@@ -54,6 +54,7 @@ class RegionAllocator
 
 
     uint32_t size      () const      { return sz; }
+    uint32_t getCap    () const      { return cap;}
     uint32_t wasted    () const      { return wasted_; }
 
     Ref      alloc     (int size); 
@@ -78,6 +79,16 @@ class RegionAllocator
         memory = NULL;
         sz = cap = wasted_ = 0;
     }
+
+    void copyTo(RegionAllocator& to) const {
+     //   if (to.memory != NULL) ::free(to.memory);
+        to.memory = (T*)xrealloc(to.memory, sizeof(T)*cap);
+        memcpy(to.memory,memory,sizeof(T)*cap);        
+        to.sz = sz;
+        to.cap = cap;
+        to.wasted_ = wasted_;
+    }
+
 
 
 };

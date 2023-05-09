@@ -1,4 +1,4 @@
-/***************************************************************************************[Constants.h]
+/***************************************************************************************[SolverCompanion.h]
  Glucose -- Copyright (c) 2009-2014, Gilles Audemard, Laurent Simon
                                 CRIL - Univ. Artois, France
                                 LRI  - Univ. Paris Sud, France (2009-2013)
@@ -47,13 +47,33 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  **************************************************************************************************/
 
-#define DYNAMICNBLEVEL
-#define CONSTANTREMOVECLAUSE
+/* This class is a general companion for a solver.
+ * The idea is to be able to have different kind of companions:
+ * - SharedCompanion that shares clauses between threads
+ * - NetworkCompanion (Not in this version) that sends clauses over the network
+ **/
 
-// Constants for clauses reductions
-#define RATIOREMOVECLAUSES 2
-
-
-// Constants for restarts
-#define LOWER_BOUND_FOR_BLOCKING_RESTART 10000
+#ifndef SolverCompanion_h
+#define SolverCompanion_h
+#include "mtl/Vec.h"
+namespace Glucose {
+    
+    class ParallelSolver;
+    
+class SolverCompanion {
+	public:
+	SolverCompanion();
+	~SolverCompanion();
+	
+	bool addSolver(ParallelSolver* s); // attach a solver to accompany 
+	
+	int runOnceCompanion(); // run it as a thread, but run it just once... 
+	
+	protected:
+	int runOnceCompanion(ParallelSolver*s); // run it only on this watched solver
+	friend class ParallelSolver;
+	vec<ParallelSolver*> watchedSolvers; 
+};
+}
+#endif
 

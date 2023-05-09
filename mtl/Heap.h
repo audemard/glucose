@@ -41,6 +41,7 @@ class Heap {
     static inline int parent(int i) { return (i-1) >> 1; }
 
 
+
     void percolateUp(int i)
     {
         int x  = heap[i];
@@ -84,6 +85,7 @@ class Heap {
     void decrease  (int n) { assert(inHeap(n)); percolateUp  (indices[n]); }
     void increase  (int n) { assert(inHeap(n)); percolateDown(indices[n]); }
 
+    void copyTo(Heap& copy) const {heap.copyTo(copy.heap);indices.copyTo(copy.indices);}
 
     // Safe variant of insert/decrease/increase:
     void update(int n)

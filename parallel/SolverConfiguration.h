@@ -1,4 +1,4 @@
-/***************************************************************************************[Constants.h]
+/***************************************************************************************[SolverConfiguration.h]
  Glucose -- Copyright (c) 2009-2014, Gilles Audemard, Laurent Simon
                                 CRIL - Univ. Artois, France
                                 LRI  - Univ. Paris Sud, France (2009-2013)
@@ -47,13 +47,22 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  **************************************************************************************************/
 
-#define DYNAMICNBLEVEL
-#define CONSTANTREMOVECLAUSE
 
-// Constants for clauses reductions
-#define RATIOREMOVECLAUSES 2
+#ifndef SolverConfiguration_h
+#define SolverConfiguration_h
 
 
-// Constants for restarts
-#define LOWER_BOUND_FOR_BLOCKING_RESTART 10000
 
+namespace Glucose {
+
+class MultiSolvers;
+
+class SolverConfiguration {
+
+public : 
+    static void configure(MultiSolvers *ms, int nbsolvers);
+    
+};
+
+}
+#endif

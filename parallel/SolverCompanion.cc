@@ -1,4 +1,4 @@
-/***************************************************************************************[Constants.h]
+/***************************************************************************************[SolverCompanion.cc]
  Glucose -- Copyright (c) 2009-2014, Gilles Audemard, Laurent Simon
                                 CRIL - Univ. Artois, France
                                 LRI  - Univ. Paris Sud, France (2009-2013)
@@ -47,13 +47,41 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  **************************************************************************************************/
 
-#define DYNAMICNBLEVEL
-#define CONSTANTREMOVECLAUSE
+/* This class is a general companion for a solver.
+ * The idea is to be able to have different kind of companions:
+ * - SharedCompanion that shares clauses between threads
+ * - NetworkCompanion (Not in this version) that sends clauses over the network
+ *
+ * The implementaton is trivial. Just keep track of watched Solvers by the companion.
+ **/
 
-// Constants for clauses reductions
-#define RATIOREMOVECLAUSES 2
+#include "parallel/SolverCompanion.h"
+
+using namespace Glucose;
+
+SolverCompanion::SolverCompanion()
+{}
+
+SolverCompanion::~SolverCompanion()
+{}
 
 
-// Constants for restarts
-#define LOWER_BOUND_FOR_BLOCKING_RESTART 10000
+bool SolverCompanion::addSolver(ParallelSolver* s) {
+	watchedSolvers.push(s);
+	return true;
+}
+
+int SolverCompanion::runOnceCompanion() {
+	int errcode = 0;
+	for(int indexSolver = 0; indexSolver<watchedSolvers.size();indexSolver++) {
+	  errcode=runOnceCompanion(watchedSolvers[indexSolver]);
+		if (errcode<0) return errcode;
+	}
+	return errcode;
+}
+
+int SolverCompanion::runOnceCompanion(ParallelSolver*s) {
+	return 0;
+}
+
 

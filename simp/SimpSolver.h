@@ -1,5 +1,34 @@
-/************************************************************************************[SimpSolver.h]
-Copyright (c) 2006,      Niklas Een, Niklas Sorensson
+/***************************************************************************************[SimpSolver.h]
+ Glucose -- Copyright (c) 2009-2014, Gilles Audemard, Laurent Simon
+                                CRIL - Univ. Artois, France
+                                LRI  - Univ. Paris Sud, France (2009-2013)
+                                Labri - Univ. Bordeaux, France
+
+ Syrup (Glucose Parallel) -- Copyright (c) 2013-2014, Gilles Audemard, Laurent Simon
+                                CRIL - Univ. Artois, France
+                                Labri - Univ. Bordeaux, France
+
+Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
+Glucose (sources until 2013, Glucose 3.0, single core) are exactly the same as Minisat on which it 
+is based on. (see below).
+
+Glucose-Syrup sources are based on another copyright. Permissions and copyrights for the parallel
+version of Glucose-Syrup (the "Software") are granted, free of charge, to deal with the Software
+without restriction, including the rights to use, copy, modify, merge, publish, distribute,
+sublicence, and/or sell copies of the Software, and to permit persons to whom the Software is 
+furnished to do so, subject to the following conditions:
+
+- The above and below copyrights notices and this permission notice shall be included in all
+copies or substantial portions of the Software;
+- The parallel version of Glucose (all files modified since Glucose 3.0 releases, 2013) cannot
+be used in any competitive event (sat competitions/evaluations) without the express permission of 
+the authors (Gilles Audemard / Laurent Simon). This is also the case for any competitive event
+using Glucose Parallel as an embedded SAT engine (single core or not).
+
+
+--------------- Original Minisat Copyrights
+
+Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 Copyright (c) 2007-2010, Niklas Sorensson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
@@ -16,14 +45,14 @@ NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPO
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-**************************************************************************************************/
+ **************************************************************************************************/
 
 #ifndef Glucose_SimpSolver_h
 #define Glucose_SimpSolver_h
 
 #include "mtl/Queue.h"
 #include "core/Solver.h"
-
+#include "mtl/Clone.h"
 
 namespace Glucose {
 
@@ -36,16 +65,27 @@ class SimpSolver : public Solver {
     //
     SimpSolver();
     ~SimpSolver();
+    
+    SimpSolver(const  SimpSolver &s);
+    
 
+    /**
+     * Clone function
+    */
+    virtual Clone* clone() const {
+        return  new SimpSolver(*this);
+    }   
+
+    
     // Problem specification:
     //
-    Var     newVar    (bool polarity = true, bool dvar = true);
+    virtual Var     newVar    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
     bool    addClause (const vec<Lit>& ps);
     bool    addEmptyClause();                // Add the empty clause to the solver.
     bool    addClause (Lit p);               // Add a unit clause to the solver.
     bool    addClause (Lit p, Lit q);        // Add a binary clause to the solver.
     bool    addClause (Lit p, Lit q, Lit r); // Add a ternary clause to the solver.
-    bool    addClause_(      vec<Lit>& ps);
+    virtual bool    addClause_(      vec<Lit>& ps);
     bool    substitute(Var v, Lit x);  // Replace all occurences of v with x (may cause a contradiction).
 
     // Variable mode:
@@ -90,7 +130,6 @@ class SimpSolver : public Solver {
     bool    use_asymm;         // Shrink clauses by asymmetric branching.
     bool    use_rcheck;        // Check if a clause is already implied. Prett costly, and subsumes subsumptions :)
     bool    use_elim;          // Perform variable elimination.
-
     // Statistics:
     //
     int     merges;
@@ -144,7 +183,7 @@ class SimpSolver : public Solver {
 
     // Main internal methods:
     //
-    lbool         solve_                   (bool do_simp = true, bool turn_off_simp = false);
+    virtual lbool         solve_                   (bool do_simp = true, bool turn_off_simp = false);
     bool          asymm                    (Var v, CRef cr);
     bool          asymmVar                 (Var v);
     void          updateElimHeap           (Var v);
@@ -155,11 +194,11 @@ class SimpSolver : public Solver {
     bool          eliminateVar             (Var v);
     void          extendModel              ();
 
-    void          removeClause             (CRef cr);
+    void          removeClause             (CRef cr,bool inPurgatory=false);
     bool          strengthenClause         (CRef cr, Lit l);
     void          cleanUpClauses           ();
     bool          implied                  (const vec<Lit>& c);
-    void          relocAll                 (ClauseAllocator& to);
+    virtual void          relocAll                 (ClauseAllocator& to);
 };
 
 

@@ -1,12 +1,33 @@
-/***********************************************************************************[SolverTypes.h]
- Glucose -- Copyright (c) 2009, Gilles Audemard, Laurent Simon
-				CRIL - Univ. Artois, France
-				LRI  - Univ. Paris Sud, France
- 
-Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
-Glucose are exactly the same as Minisat on which it is based on. (see below).
+/***************************************************************************************[SolverTypes.h]
+ Glucose -- Copyright (c) 2009-2014, Gilles Audemard, Laurent Simon
+                                CRIL - Univ. Artois, France
+                                LRI  - Univ. Paris Sud, France (2009-2013)
+                                Labri - Univ. Bordeaux, France
 
----------------
+ Syrup (Glucose Parallel) -- Copyright (c) 2013-2014, Gilles Audemard, Laurent Simon
+                                CRIL - Univ. Artois, France
+                                Labri - Univ. Bordeaux, France
+
+Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
+Glucose (sources until 2013, Glucose 3.0, single core) are exactly the same as Minisat on which it 
+is based on. (see below).
+
+Glucose-Syrup sources are based on another copyright. Permissions and copyrights for the parallel
+version of Glucose-Syrup (the "Software") are granted, free of charge, to deal with the Software
+without restriction, including the rights to use, copy, modify, merge, publish, distribute,
+sublicence, and/or sell copies of the Software, and to permit persons to whom the Software is 
+furnished to do so, subject to the following conditions:
+
+- The above and below copyrights notices and this permission notice shall be included in all
+copies or substantial portions of the Software;
+- The parallel version of Glucose (all files modified since Glucose 3.0 releases, 2013) cannot
+be used in any competitive event (sat competitions/evaluations) without the express permission of 
+the authors (Gilles Audemard / Laurent Simon). This is also the case for any competitive event
+using Glucose Parallel as an embedded SAT engine (single core or not).
+
+
+--------------- Original Minisat Copyrights
+
 Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 Copyright (c) 2007-2010, Niklas Sorensson
 
@@ -24,19 +45,22 @@ NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPO
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-**************************************************************************************************/
+ **************************************************************************************************/
 
 
 #ifndef Glucose_SolverTypes_h
 #define Glucose_SolverTypes_h
 
 #include <assert.h>
+#include <stdint.h>
+#include <pthread.h>
 
 #include "mtl/IntTypes.h"
 #include "mtl/Alg.h"
 #include "mtl/Vec.h"
 #include "mtl/Map.h"
 #include "mtl/Alloc.h"
+
 
 namespace Glucose {
 
@@ -128,56 +152,76 @@ inline lbool toLbool(int   v) { return lbool((uint8_t)v);  }
 class Clause;
 typedef RegionAllocator<uint32_t>::Ref CRef;
 
+#define BITS_LBD 13
+#define BITS_SIZEWITHOUTSEL 19
+#define BITS_REALSIZE 21
 class Clause {
     struct {
-      unsigned mark      : 2;
-      unsigned learnt    : 1;
-      unsigned has_extra : 1;
-      unsigned reloced   : 1;
-      unsigned lbd       : 26;
-      unsigned canbedel  : 1;
-      unsigned size      : 32;
-      unsigned szWithoutSelectors : 32;
+      unsigned mark       : 2;
+      unsigned learnt     : 1;
+      unsigned szWithoutSelectors : BITS_SIZEWITHOUTSEL;
+      unsigned canbedel   : 1;
+      unsigned extra_size : 2; // extra size (end of 32bits) 0..3       
+      unsigned size       : BITS_REALSIZE;
+      unsigned seen       : 1;
+      unsigned reloced    : 1;
+      unsigned exported   : 2; // Values to keep track of the clause status for exportations
+      unsigned oneWatched : 1;
+      unsigned lbd : BITS_LBD;
+    }  header;
 
-    }                            header;
     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
 
     friend class ClauseAllocator;
 
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
     template<class V>
-    Clause(const V& ps, bool use_extra, bool learnt) {
+    Clause(const V& ps, int _extra_size, bool learnt) {
+	assert(_extra_size < (1<<2));
         header.mark      = 0;
         header.learnt    = learnt;
-        header.has_extra = use_extra;
+        header.extra_size = _extra_size;
         header.reloced   = 0;
         header.size      = ps.size();
 	header.lbd = 0;
 	header.canbedel = 1;
+	header.exported = 0; 
+	header.oneWatched = 0;
+	header.seen = 0;
         for (int i = 0; i < ps.size(); i++) 
             data[i].lit = ps[i];
 	
-        if (header.has_extra){
+        if (header.extra_size > 0){
 	  if (header.learnt) 
                 data[header.size].act = 0; 
             else 
-                calcAbstraction(); }
+                calcAbstraction();
+	  if (header.extra_size > 1) {
+	      data[header.size+1].abs = 0; // learntFrom
+	  }	      
+	}
     }
 
 public:
     void calcAbstraction() {
-        assert(header.has_extra);
+        assert(header.extra_size > 0);
         uint32_t abstraction = 0;
         for (int i = 0; i < size(); i++)
             abstraction |= 1 << (var(data[i].lit) & 31);
         data[header.size].abs = abstraction;  }
 
-
     int          size        ()      const   { return header.size; }
-    void         shrink      (int i)         { assert(i <= size()); if (header.has_extra) data[header.size-i] = data[header.size]; header.size -= i; }
+    void         shrink      (int i)         { assert(i <= size()); 
+						if (header.extra_size > 0) {
+						    data[header.size-i] = data[header.size];
+						    if (header.extra_size > 1) { // Special case for imported clauses
+							data[header.size-i-1] = data[header.size-1];
+						    }
+						}
+    header.size -= i; }
     void         pop         ()              { shrink(1); }
     bool         learnt      ()      const   { return header.learnt; }
-    bool         has_extra   ()      const   { return header.has_extra; }
+    bool         has_extra   ()      const   { return header.extra_size > 0; }
     uint32_t     mark        ()      const   { return header.mark; }
     void         mark        (uint32_t m)    { header.mark = m; }
     const Lit&   last        ()      const   { return data[header.size-1].lit; }
@@ -192,16 +236,27 @@ public:
     Lit          operator [] (int i) const   { return data[i].lit; }
     operator const Lit* (void) const         { return (Lit*)data; }
 
-    float&       activity    ()              { assert(header.has_extra); return data[header.size].act; }
-    uint32_t     abstraction () const        { assert(header.has_extra); return data[header.size].abs; }
+    float&       activity    ()              { assert(header.extra_size > 0); return data[header.size].act; }
+    uint32_t     abstraction () const        { assert(header.extra_size > 0); return data[header.size].abs; }
+
+    // Handle imported clauses lazy sharing
+    bool        wasImported() const {return header.extra_size > 1;}
+    uint32_t    importedFrom () const       { assert(header.extra_size > 1); return data[header.size + 1].abs;}
+    void setImportedFrom(uint32_t ifrom) {assert(header.extra_size > 1); data[header.size+1].abs = ifrom;}
 
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
-    void         setLBD(int i)  {header.lbd = i;} 
+    void         setLBD(int i)  {if (i < (1<<(BITS_LBD-1))) header.lbd = i; else header.lbd = (1<<(BITS_LBD-1));} 
     // unsigned int&       lbd    ()              { return header.lbd; }
     unsigned int        lbd    () const        { return header.lbd; }
     void setCanBeDel(bool b) {header.canbedel = b;}
     bool canBeDel() {return header.canbedel;}
+    void setSeen(bool b) {header.seen = b;}
+    bool getSeen() {return header.seen;}
+    void setExported(unsigned int b) {header.exported = b;}
+    unsigned int getExported() {return header.exported;}
+    void setOneWatched(bool b) {header.oneWatched = b;}
+    bool getOneWatched() {return header.oneWatched;}
     void setSizeWithoutSelectors   (unsigned int n)              {header.szWithoutSelectors = n; }
     unsigned int        sizeWithoutSelectors   () const        { return header.szWithoutSelectors; }
 
@@ -215,8 +270,8 @@ public:
 const CRef CRef_Undef = RegionAllocator<uint32_t>::Ref_Undef;
 class ClauseAllocator : public RegionAllocator<uint32_t>
 {
-    static int clauseWord32Size(int size, bool has_extra){
-        return (sizeof(Clause) + (sizeof(Lit) * (size + (int)has_extra))) / sizeof(uint32_t); }
+    static int clauseWord32Size(int size, int extra_size){
+        return (sizeof(Clause) + (sizeof(Lit) * (size + extra_size))) / sizeof(uint32_t); }
  public:
     bool extra_clause_field;
 
@@ -228,14 +283,15 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         RegionAllocator<uint32_t>::moveTo(to); }
 
     template<class Lits>
-    CRef alloc(const Lits& ps, bool learnt = false)
+    CRef alloc(const Lits& ps, bool learnt = false, bool imported = false)
     {
         assert(sizeof(Lit)      == sizeof(uint32_t));
         assert(sizeof(float)    == sizeof(uint32_t));
+	
         bool use_extra = learnt | extra_clause_field;
-
-        CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), use_extra));
-        new (lea(cid)) Clause(ps, use_extra, learnt);
+        int extra_size = imported?3:(use_extra?1:0);
+        CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), extra_size));
+        new (lea(cid)) Clause(ps, extra_size, learnt);
 
         return cid;
     }
@@ -259,7 +315,7 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         
         if (c.reloced()) { cr = c.relocation(); return; }
         
-        cr = to.alloc(c, c.learnt());
+        cr = to.alloc(c, c.learnt(), c.wasImported());
         c.relocate(cr);
         
         // Copy extra data-fields: 
@@ -268,8 +324,14 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         if (to[cr].learnt())        {
 	  to[cr].activity() = c.activity();
 	  to[cr].setLBD(c.lbd());
+	  to[cr].setExported(c.getExported());
+	  to[cr].setOneWatched(c.getOneWatched());
+	  to[cr].setSeen(c.getSeen());
 	  to[cr].setSizeWithoutSelectors(c.sizeWithoutSelectors());
 	  to[cr].setCanBeDel(c.canBeDel());
+	  if (c.wasImported()) {
+             to[cr].setImportedFrom(c.importedFrom());
+	  }
 	}
         else if (to[cr].has_extra()) to[cr].calcAbstraction();
     }
@@ -296,6 +358,15 @@ class OccLists
     Vec&  lookup    (const Idx& idx){ if (dirty[toInt(idx)]) clean(idx); return occs[toInt(idx)]; }
 
     void  cleanAll  ();
+    void copyTo(OccLists &copy) const {
+	
+	copy.occs.growTo(occs.size());
+	for(int i = 0;i<occs.size();i++)
+	    occs[i].memCopyTo(copy.occs[i]);
+	dirty.memCopyTo(copy.dirty);
+	dirties.memCopyTo(copy.dirties);
+    }
+
     void  clean     (const Idx& idx);
     void  smudge    (const Idx& idx){
         if (dirty[toInt(idx)] == 0){
@@ -396,7 +467,7 @@ inline Lit Clause::subsumes(const Clause& other) const
     //if (other.size() < size() || (extra.abst & ~other.extra.abst) != 0)
     //if (other.size() < size() || (!learnt() && !other.learnt() && (extra.abst & ~other.extra.abst) != 0))
     assert(!header.learnt);   assert(!other.header.learnt);
-    assert(header.has_extra); assert(other.header.has_extra);
+    assert(header.extra_size > 0); assert(other.header.extra_size > 0);
     if (other.header.size < header.size || (data[header.size].abs & ~other.data[other.header.size].abs) != 0)
         return lit_Error;
 

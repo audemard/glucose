@@ -1,4 +1,4 @@
-/***************************************************************************************[Constants.h]
+/***************************************************************************************[ClausesBuffer.h]
  Glucose -- Copyright (c) 2009-2014, Gilles Audemard, Laurent Simon
                                 CRIL - Univ. Artois, France
                                 LRI  - Univ. Paris Sud, France (2009-2013)
@@ -47,13 +47,68 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  **************************************************************************************************/
 
-#define DYNAMICNBLEVEL
-#define CONSTANTREMOVECLAUSE
+#ifndef ClausesBuffer_h 
+#define ClausesBuffer_h
 
-// Constants for clauses reductions
-#define RATIOREMOVECLAUSES 2
+#include "mtl/Vec.h"
+#include "core/SolverTypes.h"
+#include "core/Solver.h"
 
+//=================================================================================================
 
-// Constants for restarts
-#define LOWER_BOUND_FOR_BLOCKING_RESTART 10000
+namespace Glucose {
+    // index : size clause
+    // index + 1 : nbSeen
+    // index + 2 : threadId
+    // index + 3 : .. index + 3 + size : Lit of clause
+    class ClausesBuffer {
+	vec<uint32_t>  elems;
+	unsigned int     first;
+	unsigned int	 last;
+	unsigned int     maxsize;
+	unsigned int     queuesize; // Number of current elements (must be < maxsize !)
+	unsigned int     removedClauses;
+	unsigned int     forcedRemovedClauses;
+        static const int  headerSize = 3;
+	int       nbThreads;
+	bool      whenFullRemoveOlder;
+	unsigned int fifoSizeByCore;
+	vec<unsigned int> lastOfThread; // Last value for a thread 
 
+	public:
+	ClausesBuffer(int _nbThreads, unsigned int _maxsize);
+	ClausesBuffer();
+
+	void setNbThreads(int _nbThreads);
+	unsigned int nextIndex(unsigned int i);
+	unsigned int addIndex(unsigned int i, unsigned int a); 
+	void removeLastClause(); 
+	   
+	void noCheckPush(uint32_t x);
+	uint32_t noCheckPop(unsigned int & index);
+
+	// Return true if the clause was succesfully added
+        bool pushClause(int threadId, Clause & c);
+        bool getClause(int threadId, int & threadOrigin, vec<Lit> & resultClause, bool firstFound = false); 
+	
+	int maxSize() const {return maxsize;}
+        uint32_t getCap();
+	void growTo(int size) {
+	    assert(0); // Not implemented (essentially for efficiency reasons)
+	    elems.growTo(size); 
+	    first=0; maxsize=size; queuesize = 0;last = 0;
+	    for(int i=0;i<size;i++) elems[i]=0; 
+	}
+
+	void fastclear() {first = 0; last = 0; queuesize=0; } 
+
+	int  size(void)    { return queuesize; }
+
+	void clear(bool dealloc = false)   { elems.clear(dealloc); first = 0; maxsize=0; queuesize=0;}
+	inline  int  toInt     (Lit p)              { return p.x; } 
+
+    };
+}
+//=================================================================================================
+
+#endif

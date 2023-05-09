@@ -31,12 +31,24 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 namespace Glucose {
 
-static inline double cpuTime(void); // CPU-time in seconds.
+static inline double cpuTime(void);   // CPU-time in seconds.
 static inline double realTime(void);
-extern double memUsed();            // Memory in mega bytes (returns 0 for unsupported architectures).
-extern double memUsedPeak();        // Peak-memory in mega bytes (returns 0 for unsupported architectures).
 
-}
+extern double memUsed();                                // Memory in mega bytes (returns 0 for unsupported architectures).
+extern double memUsedPeak(bool strictlyPeak = false);   // Peak-memory in mega bytes (returns 0 for unsupported architectures).
+
+extern void setX86FPUPrecision();   // Make sure double's are represented with the same precision
+// in memory and registers.
+
+extern void limitMemory(uint64_t max_mem_mb);   // Set a limit on total memory usage. The exact
+// semantics varies depending on architecture.
+
+extern void limitTime(uint32_t max_cpu_time);   // Set a limit on maximum CPU time. The exact
+// semantics varies depending on architecture.
+
+extern void sigTerm(void handler(int));   // Set up handling of available termination signals.
+
+}   // namespace Glucose
 
 //-------------------------------------------------------------------------------------------------
 // Implementation of inline functions:
@@ -47,21 +59,24 @@ extern double memUsedPeak();        // Peak-memory in mega bytes (returns 0 for 
 static inline double Glucose::cpuTime(void) { return (double)clock() / CLOCKS_PER_SEC; }
 
 #else
-#include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 static inline double Glucose::cpuTime(void) {
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
-    return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec / 1000000; }
+    return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec / 1000000;
+}
+
 
 #endif
-
 // Laurent: I know that this will not compile directly under Windows... sorry for that
 static inline double Glucose::realTime() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return (double)tv.tv_sec + (double) tv.tv_usec / 1000000; }
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
+}
+
 
 #endif

@@ -1,5 +1,5 @@
-EXEC = glucose
-DEPDIR    = mtl utils core
-MROOT = $(PWD)/..
+MROOT     = ..
+EXEC      = glucose
+DEPDIR    = mtl utils core parallel
 
 include $(MROOT)/mtl/template.mk

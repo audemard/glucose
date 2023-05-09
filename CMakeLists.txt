@@ -1,50 +1,97 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
 
 project(glucose)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/simp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-parentheses -Wall -O3 -Wno-unused-label")
 
-option(BUILD_SHARED_LIBS OFF "True for building shared object")
+#--------------------------------------------------------------------------------------------------
+# Configurable options:
 
-set(CMAKE_CXX_FLAGS "-std=c++11")
+option(STATIC_BINARIES "Link binaries statically." ON)
+option(USE_SORELEASE "Use SORELEASE in shared library filename." ON)
 
-# Dependencies {{{
-find_package(ZLIB REQUIRED)
-find_package(Threads REQUIRED)
-# }}}
+#--------------------------------------------------------------------------------------------------
+# Library version:
 
-set(main_simp "simp/Main.cc")
-set(main_parallel "parallel/Main.cc")
+set(GLUCOSE_SOMAJOR 5)
+set(GLUCOSE_SOMINOR 0)
+set(GLUCOSE_SORELEASE 0)
 
-# Basic Library
-file(GLOB lib_srcs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} mtl/*.cc core/*.cc simp/*.cc utils/*.cc)
-list(REMOVE_ITEM lib_srcs ${main_simp} ${main_parallel})
+# Compute VERSION and SOVERSION:
+if (USE_SORELEASE)
+    set(GLUCOSE_VERSION ${GLUCOSE_SOMAJOR}.${GLUCOSE_SOMINOR}.${GLUCOSE_SORELEASE})
+else ()
+    set(GLUCOSE_VERSION ${GLUCOSE_SOMAJOR}.${GLUCOSE_SOMINOR})
+endif ()
+set(GLUCOSE_SOVERSION ${GLUCOSE_SOMAJOR})
 
-message(${lib_srcs})
+#--------------------------------------------------------------------------------------------------
+# Dependencies:
 
-# Parallel Library
-file(GLOB lib_parallel_srcs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} parallel/*.cc)
-list(REMOVE_ITEM lib_parallel_srcs ${main_simp} ${main_parallel})
+find_package(ZLIB)
+include_directories(${ZLIB_INCLUDE_DIR})
+include_directories(${glucose_SOURCE_DIR})
+#--------------------------------------------------------------------------------------------------
+# Compile flags:
+
+add_definitions(-D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS)
+
+#--------------------------------------------------------------------------------------------------
+# Build Targets:
 
 
-if(BUILD_SHARED_LIBS)
-    set(lib_type "SHARED")
-else()
-    set(lib_type "STATIC")
-endif()
+set(GLUCOSE_LIB_SOURCES
+        utils/Options.cc
+        utils/System.cc
+        core/Solver.cc
+        core/Restart.cc
+        core/lcm.cc
+        core/ClauseManager.cc
+        core/CCANR.cc
+        simp/SimpSolver.cc
+        parallel/ParallelSolver.cc
+        )
+
+link_directories(${CMAKE_CURRENT_SOURCE_DIR}/pfactory/lib)
 
 
-include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${ZLIB_INCLUDE_DIR})
+add_library(glucose-lib-static STATIC ${GLUCOSE_LIB_SOURCES})
+#add_library(glucose-lib-shared SHARED ${GLUCOSE_LIB_SOURCES})
 
-link_libraries(${ZLIB_LIBRARY})
+#target_link_libraries(glucose-lib-shared ${ZLIB_LIBRARY})
+target_link_libraries(glucose-lib-static ${ZLIB_LIBRARY})
 
-# base library
-add_library(glucose ${lib_type} ${lib_srcs})
+#target_link_libraries(glucose-lib-shared pthread)
+target_link_libraries(glucose-lib-static pthread)
 
-add_executable(glucose-simp ${main_simp})
-target_link_libraries(glucose-simp glucose)
+#target_link_libraries(glucose-lib-shared pFactory)
+target_link_libraries(glucose-lib-static pFactory)
 
-# PARALLEL STUFF:
-add_library(glucosep ${lib_type} ${lib_srcs} ${lib_parallel_srcs})
-add_executable(glucose-syrup ${main_parallel})
-target_link_libraries(glucose-syrup glucosep ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(glucose simp/Main.cc)
+
+if (STATIC_BINARIES)
+    target_link_libraries(glucose glucose-lib-static)
+else ()
+    target_link_libraries(glucose glucose-lib-shared)
+endif ()
+
+set_target_properties(glucose-lib-static PROPERTIES OUTPUT_NAME "glucose")
+#set_target_properties(glucose-lib-shared
+#        PROPERTIES
+#        OUTPUT_NAME "glucose"
+#        VERSION ${GLUCOSE_VERSION}
+#        SOVERSION ${GLUCOSE_SOVERSION})
+
+
+#--------------------------------------------------------------------------------------------------
+# Installation targets:
+
+install(TARGETS glucose-lib-static glucose
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib)
+
+install(DIRECTORY mtl utils core simp
+        DESTINATION include/glucose
+        FILES_MATCHING PATTERN "*.h")

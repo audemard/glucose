@@ -17,14 +17,15 @@ PCOBJS     = $(addsuffix p,  $(COBJS))
 DCOBJS     = $(addsuffix d,  $(COBJS))
 RCOBJS     = $(addsuffix r,  $(COBJS))
 
+
 CXX       ?= g++
 CFLAGS    ?= -Wall -Wno-parentheses -std=c++11
-LFLAGS    ?= -Wall -lpthread 
+LFLAGS    ?= -Wall
 
 COPTIMIZE ?= -O3
 
 CFLAGS    += -I$(MROOT) -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS
-LFLAGS    += -lz
+LFLAGS    += -lz -lpFactory -lpthread -L ../pfactory/lib
 
 .PHONY : s p d r rs clean 
 
@@ -64,11 +65,15 @@ lib$(LIB)_profile.a:	$(filter-out */Main.op, $(PCOBJS))
 lib$(LIB)_debug.a:	$(filter-out */Main.od, $(DCOBJS))
 lib$(LIB)_release.a:	$(filter-out */Main.or, $(RCOBJS))
 
+GIT_HASH=`git rev-parse HEAD`
+COMPILE_TIME=`date -u +'%Y-%m-%d %H:%M:%S UTC'`
+GIT_BRANCH=`git branch | grep "^\*" | sed 's/^..//'`
+export VERSION_FLAGS=-DGIT_HASH="\"$(GIT_HASH)\"" -DCOMPILE_TIME="\"$(COMPILE_TIME)\"" -DGIT_BRANCH="\"$(GIT_BRANCH)\""
 
 ## Build rule
 %.o %.op %.od %.or:	%.cc
 	@echo Compiling: $(subst $(MROOT)/,,$@)
-	@$(CXX) $(CFLAGS) -c -o $@ $<
+	@$(CXX) $(CFLAGS) $(VERSION_FLAGS) -c -o $@ $<
 
 ## Linking rules (standard/profile/debug/release)
 $(EXEC) $(EXEC)_profile $(EXEC)_debug $(EXEC)_release $(EXEC)_static:
@@ -86,11 +91,8 @@ libs libp libd libr:
 	@ln -sf $^ lib$(LIB).a
 
 ## Clean rule
-allclean: clean
-	
-	@rm -f ../simp/*.o ../simp/*.or ../simp/*.od  ../core/*.o ../core/*.or ../core/*.od
 clean:
-	rm -f $(EXEC) $(EXEC)_profile $(EXEC)_debug $(EXEC)_release $(EXEC)_static \
+	@rm -f $(EXEC) $(EXEC)_profile $(EXEC)_debug $(EXEC)_release $(EXEC)_static \
 	  $(COBJS) $(PCOBJS) $(DCOBJS) $(RCOBJS) *.core depend.mk 
 
 ## Make dependencies

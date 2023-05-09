@@ -1,7 +1,4 @@
-MTL       = ../mtl
-CHDRS     = $(wildcard *.h) $(wildcard $(MTL)/*.h)
 EXEC      = glucose
-CFLAGS    = -I$(MTL) -Wall -ffloat-store
-LFLAGS    = -lz
-
-include ../mtl/template.mk
+DEPDIR    = mtl utils
+MROOT = $(PWD)/..
+include $(MROOT)/mtl/template.mk

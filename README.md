@@ -5,7 +5,7 @@ This is the release 4.2.1 of the glucose SAT solver.
 It is based on [Minisat 2.2](http://minisat.se/MiniSat.html)
 
 ## Presentation 
-Glucose is an award winning SAT solver based on a scoring scheme we introduced in 2009 for the clause learning mechanism of so called “Modern” SAT sovlers (see our IJCAI’09 paper). It is designed to be parallel, since 2014 and was enterly rebooted in 2021. 
+Glucose is an award winning SAT solver based on a scoring scheme we introduced in 2009 for the clause learning mechanism of so called “Modern” SAT solvers (see our IJCAI’09 paper). It is designed to be parallel, since 2014 and was enterly rebooted in 2021. 
 Glucose is developed by a very friendly team: Gilles Audemard and Laurent Simon. 
 
 The name of the Solver name is a contraction of the concept of “glue clauses”, a particular kind of clauses that glucose detects and preserves during search.

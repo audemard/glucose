@@ -21,7 +21,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef Glucose_System_h
 #define Glucose_System_h
 
-#if defined(__linux__)
+#if defined(__linux__) && defined(__GLIBC__) && (defined(__i386__) || defined(__x86_64__))
 #include <fpu_control.h>
 #endif
 

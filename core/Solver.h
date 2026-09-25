@@ -455,6 +455,7 @@ protected:
     double   progressEstimate ()      const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
     bool     withinBudget     ()      const;
     inline bool isSelector(Var v) {return (incremental && v>nbVarsInitialFormula);}
+    void     incrementMyFlag  ();
 
     // Static helpers:
     //
@@ -584,6 +585,15 @@ inline bool     Solver::withinBudget() const {
     return !asynch_interrupt &&
            (conflict_budget    < 0 || conflicts < (uint64_t)conflict_budget) &&
            (propagation_budget < 0 || propagations < (uint64_t)propagation_budget); }
+inline void     Solver::incrementMyFlag() {
+    // MYFLAG may overflow, in which case we have to reset the permDiff array.
+    // Without this reset, the LBD computation and minimisationWithBinaryResolution may return wrong results.
+    // This reset occurs very rarely (once every 2^32 calls), so the overhead is negligible.
+    if (MYFLAG++ == 0) {
+        for (int i = 0; i < permDiff.size(); ++i) permDiff[i] = 0;
+        MYFLAG = 1;
+    }
+}
 
 // FIXME: after the introduction of asynchronous interrruptions the solve-versions that return a
 // pure bool do not give a safe interface. Either interrupts must be possible to turn off here, or
@@ -608,7 +618,7 @@ inline void     Solver::toDimacs     (const char* file, Lit p, Lit q, Lit r){ ve
 
 template <typename T>inline unsigned int Solver::computeLBD(const T &lits, int end) {
     int nblevels = 0;
-    MYFLAG++;
+    incrementMyFlag();
 #ifdef INCREMENTAL
     if(incremental) { // ----------------- INCREMENTAL MODE
       if(end==-1) end = lits.size();

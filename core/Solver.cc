@@ -565,7 +565,7 @@ void Solver::minimisationWithBinaryResolution(vec <Lit> &out_learnt) {
     Lit p = ~out_learnt[0];
 
     if(lbd <= lbLBDMinimizingClause) {
-        MYFLAG++;
+        incrementMyFlag();
 
         for(int i = 1; i < out_learnt.size(); i++) {
             permDiff[var(out_learnt[i])] = MYFLAG;

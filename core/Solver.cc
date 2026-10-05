@@ -291,7 +291,7 @@ Solver::Solver(const Solver &s) :
     ca.extra_clause_field = s.ca.extra_clause_field;
 
     // Initialize  other variables
-    MYFLAG = 0;
+    MYFLAG = s.MYFLAG;
     // Initialize only first time. Useful for incremental solving (not in // version), useless otherwise
     // Kept here for simplicity
     sumLBD = s.sumLBD;

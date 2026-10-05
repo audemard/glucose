@@ -589,7 +589,7 @@ inline void     Solver::incrementMyFlag() {
     // MYFLAG may overflow, in which case we have to reset the permDiff array.
     // Without this reset, the LBD computation and minimisationWithBinaryResolution may return wrong results.
     // This reset occurs very rarely (once every 2^32 calls), so the overhead is negligible.
-    if (MYFLAG++ == 0) {
+    if (++MYFLAG == 0) {
         for (int i = 0; i < permDiff.size(); ++i) permDiff[i] = 0;
         MYFLAG = 1;
     }
